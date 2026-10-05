@@ -186,6 +186,3 @@ dyno-forms/
 
 ---
 
-## Architectural Reference
-
-For complete engineering details, depth-first collision mathematics, AST data structures, and the AI conversion pipeline, consult [antigravity.md](antigravity.md).

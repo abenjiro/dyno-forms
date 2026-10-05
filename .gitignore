@@ -1,0 +1,32 @@
+# Dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+# Next.js build output
+/.next/
+/out/
+/dist/
+*.tsbuildinfo
+next-env.d.ts
+
+# Production
+/build
+
+# Environment files
+.env*.local
+.env
+
+# Debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# OS / Editor files
+.DS_Store
+*.pem
+*:Zone.Identifier
+
+# Antigravity artifacts
+.gemini/

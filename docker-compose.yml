@@ -1,0 +1,44 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dev
+    container_name: dyno-forms-app
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - HOSTNAME=0.0.0.0
+      - WATCHPACK_POLLING=true
+      - NEXT_PUBLIC_MOCK_API_URL=http://localhost:4000
+    depends_on:
+      mock-api:
+        condition: service_healthy
+    networks:
+      - dyno-network
+
+  mock-api:
+    build:
+      context: docker/mock-server
+      dockerfile: Dockerfile
+    container_name: dyno-forms-mock-api
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./docker/mock-server/data:/app/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+    networks:
+      - dyno-network
+
+networks:
+  dyno-network:
+    driver: bridge

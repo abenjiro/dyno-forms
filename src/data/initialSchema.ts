@@ -1,4 +1,4 @@
-import { FormSchema } from '@/types/schema';
+import { FormSchema } from '../types/schema';
 
 export const sampleFormSchema: FormSchema = {
   id: 'form_enterprise_onboarding',
@@ -91,7 +91,7 @@ export const sampleFormSchema: FormSchema = {
                 dataSource: {
                   type: 'api',
                   api: {
-                    url: 'http://localhost:4000/api/countries',
+                    url: 'http://localhost:4050/api/countries',
                     labelPath: 'name.common',
                     valuePath: 'cca2',
                     cacheTimeMs: 300000,
@@ -112,7 +112,7 @@ export const sampleFormSchema: FormSchema = {
                 dataSource: {
                   type: 'api',
                   api: {
-                    url: 'http://localhost:4000/api/states',
+                    url: 'http://localhost:4050/api/states',
                     labelPath: 'label',
                     valuePath: 'code',
                     dependsOnField: 'country',

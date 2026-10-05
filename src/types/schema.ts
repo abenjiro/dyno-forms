@@ -158,3 +158,52 @@ export interface DragItemData {
   treeDepth?: number;
   node?: FormNode;
 }
+
+// Type Guards
+export function isContainerNode(node: FormNode): node is ContainerNode {
+  return node.isContainer === true && Array.isArray((node as ContainerNode).children);
+}
+
+export function isFieldNode(node: FormNode): node is FieldNode {
+  return !node.isContainer;
+}
+
+// Node Type Categories
+export const CONTAINER_NODE_TYPES: readonly NodeType[] = [
+  'canvas',
+  'section',
+  'grid',
+  'column',
+  'card',
+  'tabs',
+  'tab-panel',
+] as const;
+
+export const INPUT_NODE_TYPES: readonly NodeType[] = [
+  'text',
+  'textarea',
+  'number',
+  'select',
+  'radio',
+  'checkbox',
+  'switch',
+  'date',
+  'file',
+] as const;
+
+export const PRESENTATIONAL_NODE_TYPES: readonly NodeType[] = [
+  'heading',
+  'paragraph',
+  'divider',
+] as const;
+
+export type NodeCategory = 'layout' | 'inputs' | 'presentational';
+
+export interface PaletteItemMeta {
+  type: NodeType;
+  label: string;
+  category: NodeCategory;
+  description: string;
+  iconName: string;
+  isContainer: boolean;
+}

@@ -64,20 +64,20 @@ cd dyno-forms
 
 #### 2. Start the Development Stack
 ```bash
-# Start both Next.js app (port 3000) and Mock API (port 4000)
+# Start both Next.js app (port 3050) and Mock API (port 4050)
 docker compose up --build
 ```
 *(Or use `make dev`)*
 
 #### 3. Access the Applications
--  **Dyno Forms App:** [http://localhost:3000](http://localhost:3000)
-  - Visual Builder: [http://localhost:3000/builder](http://localhost:3000/builder)
-  - Form Runtime Demo: [http://localhost:3000/f/demo](http://localhost:3000/f/demo)
-  - AI Form Converter: [http://localhost:3000/convert](http://localhost:3000/convert)
--  **Mock API Server:** [http://localhost:4000](http://localhost:4000)
-  - Mock Health Check: [http://localhost:4000/health](http://localhost:4000/health)
-  - Countries API: [http://localhost:4000/api/countries](http://localhost:4000/api/countries)
-  - Cascading States API: [http://localhost:4000/api/states?country=US](http://localhost:4000/api/states?country=US)
+-  **Dyno Forms App:** [http://localhost:3050](http://localhost:3050)
+  - Visual Builder: [http://localhost:3050/builder](http://localhost:3050/builder)
+  - Form Runtime Demo: [http://localhost:3050/f/demo](http://localhost:3050/f/demo)
+  - AI Form Converter: [http://localhost:3050/convert](http://localhost:3050/convert)
+-  **Mock API Server:** [http://localhost:4050](http://localhost:4050)
+  - Mock Health Check: [http://localhost:4050/health](http://localhost:4050/health)
+  - Countries API: [http://localhost:4050/api/countries](http://localhost:4050/api/countries)
+  - Cascading States API: [http://localhost:4050/api/states?country=US](http://localhost:4050/api/states?country=US)
 
 #### 4. Stop Containers
 ```bash
@@ -103,17 +103,17 @@ npm install
 node docker/mock-server/server.js
 # (or make local-mock)
 ```
-*Output: `[Dyno Mock API Server] running on http://0.0.0.0:4000`*
+*Output: `[Dyno Mock API Server] running on http://0.0.0.0:4050`*
 
 #### 3. Start the Next.js Development Server (Terminal 2)
 ```bash
 npm run dev
 # (or make local-dev)
 ```
-*Output: `▲ Next.js 15... Ready in http://localhost:3000`*
+*Output: `▲ Next.js 15... Ready in http://localhost:3050`*
 
 #### 4. Open Browser
-Visit [http://localhost:3000](http://localhost:3000).
+Visit [http://localhost:3050](http://localhost:3050).
 
 ---
 

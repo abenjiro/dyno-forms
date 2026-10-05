@@ -4,7 +4,7 @@
   "description": "Enterprise Schema-Driven Drag-and-Drop Form Builder and Headless Runtime",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 3050",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",

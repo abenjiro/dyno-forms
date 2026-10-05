@@ -1,0 +1,12 @@
+services:
+  app-prod:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.prod
+    container_name: dyno-forms-prod
+    ports:
+      - "8080:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    restart: always

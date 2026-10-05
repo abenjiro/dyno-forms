@@ -1,0 +1,17 @@
+{
+  "status": "success",
+  "meta": {
+    "total": 6,
+    "page": 1
+  },
+  "data": {
+    "results": [
+      { "id": "tech", "title": "Technology & Software", "active": true },
+      { "id": "finance", "title": "Banking & Financial Services", "active": true },
+      { "id": "health", "title": "Healthcare & Life Sciences", "active": true },
+      { "id": "education", "title": "Education & E-Learning", "active": true },
+      { "id": "retail", "title": "Retail & E-Commerce", "active": true },
+      { "id": "manufacturing", "title": "Manufacturing & Logistics", "active": true }
+    ]
+  }
+}

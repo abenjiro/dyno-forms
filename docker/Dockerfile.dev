@@ -1,0 +1,22 @@
+# Development Dockerfile with Live Hot Module Replacement
+FROM node:22-alpine
+
+WORKDIR /app
+
+# Install dependencies required for Alpine builds if any
+RUN apk add --no-cache libc6-compat
+
+# Copy package descriptors first to maximize Docker layer caching
+COPY package*.json ./
+
+RUN npm install
+
+# Expose Next.js dev port
+EXPOSE 3000
+
+# Enable file watching across Docker volumes
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+ENV WATCHPACK_POLLING=true
+
+CMD ["npm", "run", "dev"]

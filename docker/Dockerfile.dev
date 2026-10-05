@@ -12,10 +12,11 @@ COPY package*.json ./
 RUN npm install
 
 # Expose Next.js dev port
-EXPOSE 3000
+ARG PORT=3050
+ENV PORT=${PORT}
+EXPOSE ${PORT}
 
 # Enable file watching across Docker volumes
-ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 ENV WATCHPACK_POLLING=true
 

@@ -1,0 +1,18 @@
+import { NextResponse } from 'next/server';
+
+const countries = [
+  { cca2: 'US', name: { common: 'United States' }, region: 'Americas' },
+  { cca2: 'CA', name: { common: 'Canada' }, region: 'Americas' },
+  { cca2: 'GB', name: { common: 'United Kingdom' }, region: 'Europe' },
+  { cca2: 'DE', name: { common: 'Germany' }, region: 'Europe' },
+  { cca2: 'FR', name: { common: 'France' }, region: 'Europe' },
+  { cca2: 'JP', name: { common: 'Japan' }, region: 'Asia' },
+  { cca2: 'GH', name: { common: 'Ghana' }, region: 'Africa' },
+  { cca2: 'NG', name: { common: 'Nigeria' }, region: 'Africa' },
+  { cca2: 'AU', name: { common: 'Australia' }, region: 'Oceania' },
+  { cca2: 'BR', name: { common: 'Brazil' }, region: 'Americas' },
+];
+
+export async function GET() {
+  return NextResponse.json(countries);
+}

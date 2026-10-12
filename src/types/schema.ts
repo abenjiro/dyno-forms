@@ -124,6 +124,7 @@ export interface FieldNode extends BaseNode {
 export type FormNode = ContainerNode | FieldNode;
 
 export interface FormSettings {
+  layoutMode?: 'single-page' | 'wizard';
   submitLabel?: string;
   resetLabel?: string;
   showReset?: boolean;

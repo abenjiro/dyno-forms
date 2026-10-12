@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { useForm, FormProvider } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { FormSchema, FieldNode, isFieldNode } from '@/types/schema';
+import { FormSchema, FieldNode, isFieldNode, isContainerNode } from '@/types/schema';
 import { flattenTree } from '@/store/treeMutations';
 import { buildZodSchema } from '@/runtime/validationBuilder';
 import {
@@ -88,10 +88,42 @@ export function FormRenderer({
     handleSubmit,
     watch,
     reset,
+    trigger,
     formState: { isDirty, isValid },
   } = methods;
 
   const currentValues = watch();
+
+  // Multi-Step Form Wizard mode setup
+  const isWizardMode = schema.settings.layoutMode === 'wizard' && schema.root.children.length > 1;
+  const wizardSteps = schema.root.children;
+  const [currentStepIndex, setCurrentStepIndex] = useState(0);
+
+  // Field names belonging to the current step (for step validation before advancing)
+  const currentStepFieldNames = useMemo(() => {
+    if (!isWizardMode || !wizardSteps[currentStepIndex]) return [];
+    const stepNode = wizardSteps[currentStepIndex];
+    const stepNodes = isContainerNode(stepNode) ? flattenTree(stepNode) : [stepNode];
+    return stepNodes
+      .filter((n): n is FieldNode => isFieldNode(n) && Boolean(n.name))
+      .map((f) => f.name);
+  }, [isWizardMode, wizardSteps, currentStepIndex]);
+
+  const handleNextStep = async () => {
+    if (currentStepFieldNames.length > 0) {
+      const isStepValid = await trigger(currentStepFieldNames);
+      if (!isStepValid) return;
+    }
+    if (currentStepIndex < wizardSteps.length - 1) {
+      setCurrentStepIndex((prev) => prev + 1);
+    }
+  };
+
+  const handlePrevStep = () => {
+    if (currentStepIndex > 0) {
+      setCurrentStepIndex((prev) => prev - 1);
+    }
+  };
 
   // Calculate completion percentage
   const progressPercent = useMemo(() => {
@@ -371,43 +403,125 @@ export function FormRenderer({
 
         {/* Main Interactive Form Canvas */}
         <form onSubmit={handleSubmit(onFormSubmit)} noValidate>
-          <FormNodeRenderer node={schema.root} />
+          {isWizardMode ? (
+            <div className="space-y-6">
+              {/* Stepper Navigation Bar */}
+              <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-sm">
+                <div className="flex items-center justify-between mb-3 text-xs">
+                  <span className="font-bold text-blue-600 uppercase tracking-wider">
+                    Step {currentStepIndex + 1} of {wizardSteps.length}: {wizardSteps[currentStepIndex].label || `Step ${currentStepIndex + 1}`}
+                  </span>
+                  <span className="text-slate-500 font-medium">
+                    {Math.round(((currentStepIndex + 1) / wizardSteps.length) * 100)}% of steps
+                  </span>
+                </div>
+
+                {/* Step Indicators */}
+                <div className="flex items-center space-x-2">
+                  {wizardSteps.map((step, idx) => {
+                    const isCompleted = idx < currentStepIndex;
+                    const isCurrent = idx === currentStepIndex;
+                    return (
+                      <button
+                        key={step.id}
+                        type="button"
+                        onClick={async () => {
+                          if (idx < currentStepIndex) {
+                            setCurrentStepIndex(idx);
+                          } else if (idx === currentStepIndex + 1) {
+                            handleNextStep();
+                          }
+                        }}
+                        disabled={idx > currentStepIndex}
+                        className={clsx(
+                          'flex-1 flex items-center space-x-2 py-2 px-3 rounded-xl border text-xs font-semibold transition-all text-left truncate',
+                          isCompleted && 'border-emerald-300 bg-emerald-50 text-emerald-800 cursor-pointer',
+                          isCurrent && 'border-blue-500 bg-blue-50 text-blue-800 ring-2 ring-blue-500/20 shadow-xs',
+                          !isCompleted && !isCurrent && 'border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed opacity-60'
+                        )}
+                      >
+                        <span
+                          className={clsx(
+                            'w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0',
+                            isCompleted && 'bg-emerald-600 text-white',
+                            isCurrent && 'bg-blue-600 text-white',
+                            !isCompleted && !isCurrent && 'bg-slate-200 text-slate-600'
+                          )}
+                        >
+                          {isCompleted ? '✓' : idx + 1}
+                        </span>
+                        <span className="truncate hidden sm:inline">{step.label || `Step ${idx + 1}`}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Active Step Content */}
+              <div className="animate-fadeIn">
+                <FormNodeRenderer node={wizardSteps[currentStepIndex]} />
+              </div>
+            </div>
+          ) : (
+            <FormNodeRenderer node={schema.root} />
+          )}
 
           {/* Form Actions Footer */}
           {!readOnly && (
             <div className="mt-8 pt-6 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4">
               <div>
-                {schema.settings.showReset && (
+                {isWizardMode ? (
                   <button
                     type="button"
-                    onClick={() => reset(defaultFormValues)}
-                    className="inline-flex items-center space-x-1.5 px-4 py-2.5 rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-700 font-medium text-sm transition-colors"
+                    onClick={handlePrevStep}
+                    disabled={currentStepIndex === 0}
+                    className="inline-flex items-center space-x-1.5 px-4 py-2.5 rounded-xl border border-slate-300 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed text-slate-700 font-medium text-sm transition-colors cursor-pointer"
                   >
-                    <RotateCcw className="w-4 h-4" />
-                    <span>{schema.settings.resetLabel || 'Reset Form'}</span>
+                    <span>← Previous Step</span>
                   </button>
+                ) : (
+                  schema.settings.showReset && (
+                    <button
+                      type="button"
+                      onClick={() => reset(defaultFormValues)}
+                      className="inline-flex items-center space-x-1.5 px-4 py-2.5 rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-700 font-medium text-sm transition-colors cursor-pointer"
+                    >
+                      <RotateCcw className="w-4 h-4" />
+                      <span>{schema.settings.resetLabel || 'Reset Form'}</span>
+                    </button>
+                  )
                 )}
               </div>
 
               <div className="flex items-center space-x-3 w-full sm:w-auto">
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className={clsx(
-                    'w-full sm:w-auto inline-flex items-center justify-center space-x-2 px-7 py-3 rounded-xl font-semibold text-sm text-white shadow-md transition-all',
-                    'bg-blue-600 hover:bg-blue-700 active:scale-[0.99] shadow-blue-500/25',
-                    isSubmitting && 'opacity-70 cursor-not-allowed'
-                  )}
-                >
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Processing Submission...</span>
-                    </>
-                  ) : (
-                    <span>{schema.settings.submitLabel || 'Submit Form'}</span>
-                  )}
-                </button>
+                {isWizardMode && currentStepIndex < wizardSteps.length - 1 ? (
+                  <button
+                    type="button"
+                    onClick={handleNextStep}
+                    className="w-full sm:w-auto inline-flex items-center justify-center space-x-2 px-7 py-3 rounded-xl font-semibold text-sm text-white shadow-md transition-all bg-blue-600 hover:bg-blue-700 active:scale-[0.99] shadow-blue-500/25 cursor-pointer"
+                  >
+                    <span>Next Step →</span>
+                  </button>
+                ) : (
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className={clsx(
+                      'w-full sm:w-auto inline-flex items-center justify-center space-x-2 px-7 py-3 rounded-xl font-semibold text-sm text-white shadow-md transition-all cursor-pointer',
+                      'bg-blue-600 hover:bg-blue-700 active:scale-[0.99] shadow-blue-500/25',
+                      isSubmitting && 'opacity-70 cursor-not-allowed'
+                    )}
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Processing Submission...</span>
+                      </>
+                    ) : (
+                      <span>{schema.settings.submitLabel || 'Submit Form'}</span>
+                    )}
+                  </button>
+                )}
               </div>
             </div>
           )}

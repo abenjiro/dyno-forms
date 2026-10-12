@@ -70,6 +70,42 @@ export function PropertyInspector() {
             </div>
           </div>
 
+          {/* Form Layout Mode: Single-Page vs Wizard */}
+          <div className="space-y-2">
+            <label className="text-xs font-semibold text-slate-700 block">Form Layout Mode</label>
+            <div className="flex rounded-lg border border-slate-200 bg-slate-100 p-0.5 text-xs">
+              <button
+                type="button"
+                onClick={() => updateFormSettings({ layoutMode: 'single-page' })}
+                className={clsx(
+                  'flex-1 py-1.5 rounded-md font-medium transition-all cursor-pointer',
+                  (schema.settings.layoutMode || 'single-page') === 'single-page'
+                    ? 'bg-white text-blue-600 shadow-xs font-semibold'
+                    : 'text-slate-600 hover:text-slate-900'
+                )}
+              >
+                Single Page
+              </button>
+              <button
+                type="button"
+                onClick={() => updateFormSettings({ layoutMode: 'wizard' })}
+                className={clsx(
+                  'flex-1 py-1.5 rounded-md font-medium transition-all cursor-pointer',
+                  schema.settings.layoutMode === 'wizard'
+                    ? 'bg-white text-blue-600 shadow-xs font-semibold'
+                    : 'text-slate-600 hover:text-slate-900'
+                )}
+              >
+                Multi-Step Wizard
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-500 leading-normal">
+              {schema.settings.layoutMode === 'wizard'
+                ? 'Paginates top-level sections into steps with stepper progress and Next/Prev controls.'
+                : 'Displays all sections together on a continuous scrolling page.'}
+            </p>
+          </div>
+
           <hr className="border-slate-100" />
 
           {/* Form Action Settings */}

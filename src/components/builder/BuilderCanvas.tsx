@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -28,6 +28,71 @@ export function BuilderCanvas() {
   const setDropIndicator = useFormBuilderStore((s) => s.setDropIndicator);
   const insertNode = useFormBuilderStore((s) => s.insertNode);
   const moveNode = useFormBuilderStore((s) => s.moveNode);
+  const selectedNodeId = useFormBuilderStore((s) => s.selectedNodeId);
+  const selectNode = useFormBuilderStore((s) => s.selectNode);
+  const removeNode = useFormBuilderStore((s) => s.removeNode);
+  const duplicateNode = useFormBuilderStore((s) => s.duplicateNode);
+  const undo = useFormBuilderStore((s) => s.undo);
+  const redo = useFormBuilderStore((s) => s.redo);
+
+  // Keyboard Shortcuts: Delete, Ctrl+D (duplicate), Escape (deselect), Ctrl+Z / Ctrl+Y (undo/redo)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.tagName === 'SELECT' ||
+        target.isContentEditable
+      ) {
+        return;
+      }
+
+      // Undo: Ctrl+Z / Cmd+Z
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        undo();
+        return;
+      }
+
+      // Redo: Ctrl+Y / Cmd+Y or Ctrl+Shift+Z / Cmd+Shift+Z
+      if (
+        ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') ||
+        ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'z')
+      ) {
+        e.preventDefault();
+        redo();
+        return;
+      }
+
+      // Escape: Deselect active node
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        selectNode(null);
+        return;
+      }
+
+      // If a node is selected (and not the root canvas)
+      if (selectedNodeId && selectedNodeId !== schema.root.id) {
+        // Delete / Backspace
+        if (e.key === 'Delete' || e.key === 'Backspace') {
+          e.preventDefault();
+          removeNode(selectedNodeId);
+          return;
+        }
+
+        // Duplicate: Ctrl+D / Cmd+D
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') {
+          e.preventDefault();
+          duplicateNode(selectedNodeId);
+          return;
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedNodeId, schema.root.id, selectNode, removeNode, duplicateNode, undo, redo]);
 
   // Require 5px movement before activating drag (allows clean clicks without dragging)
   const sensors = useSensors(
@@ -189,6 +254,17 @@ export function BuilderCanvas() {
 
               {/* Main Canvas Component Tree */}
               <CanvasNode node={schema.root} />
+
+              {/* Bottom Canvas Helper Bar */}
+              <div className="px-6 py-2.5 border-t border-slate-100 bg-slate-50/70 rounded-b-2xl flex items-center justify-between text-[11px] text-slate-500">
+                <div className="flex items-center space-x-3">
+                  <span><kbd className="px-1.5 py-0.5 bg-white border border-slate-200 rounded font-mono text-[10px] shadow-xs">Del</kbd> Delete</span>
+                  <span><kbd className="px-1.5 py-0.5 bg-white border border-slate-200 rounded font-mono text-[10px] shadow-xs">Ctrl+D</kbd> Duplicate</span>
+                  <span><kbd className="px-1.5 py-0.5 bg-white border border-slate-200 rounded font-mono text-[10px] shadow-xs">Esc</kbd> Deselect</span>
+                  <span><kbd className="px-1.5 py-0.5 bg-white border border-slate-200 rounded font-mono text-[10px] shadow-xs">Ctrl+Z</kbd> Undo</span>
+                </div>
+                <span>{selectedNodeId ? `Selected: ${selectedNodeId}` : 'Click any element to inspect'}</span>
+              </div>
             </div>
 
             {/* Drag Overlay Ghost */}

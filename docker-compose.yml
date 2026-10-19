@@ -16,6 +16,7 @@ services:
       - HOSTNAME=0.0.0.0
       - WATCHPACK_POLLING=true
       - NEXT_PUBLIC_MOCK_API_URL=${NEXT_PUBLIC_MOCK_API_URL:-http://localhost:4050}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
     depends_on:
       mock-api:
         condition: service_healthy

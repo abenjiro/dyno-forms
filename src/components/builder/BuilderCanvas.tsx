@@ -34,6 +34,12 @@ export function BuilderCanvas() {
   const duplicateNode = useFormBuilderStore((s) => s.duplicateNode);
   const undo = useFormBuilderStore((s) => s.undo);
   const redo = useFormBuilderStore((s) => s.redo);
+  const hydrateFromStorage = useFormBuilderStore((s) => s.hydrateFromStorage);
+
+  // Hydrate converted or saved schema on mount
+  useEffect(() => {
+    hydrateFromStorage();
+  }, [hydrateFromStorage]);
 
   // Keyboard Shortcuts: Delete, Ctrl+D (duplicate), Escape (deselect), Ctrl+Z / Ctrl+Y (undo/redo)
   useEffect(() => {

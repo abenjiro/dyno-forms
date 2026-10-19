@@ -412,15 +412,23 @@ function generateHeuristicSchema(filename: string = 'document.pdf'): FormSchema 
   };
 }
 
+const CANDIDATE_GEMINI_MODELS = [
+  process.env.GEMINI_MODEL,
+  'gemini-3.6-flash',
+  'gemini-3.5-flash',
+  'gemini-3.8-flash',
+  'gemini-3.5-flash-lite',
+].filter(Boolean) as string[];
+
 /**
- * Call live Google Gemini 2.0 Vision API with base64 file data
+ * Call live Google Gemini Vision API with base64 file data and resilient model cascade
  */
 async function callGeminiVision(
   base64Data: string,
   mimeType: string,
   apiKey: string,
   filename: string
-): Promise<FormSchema> {
+): Promise<{ schema: FormSchema; model: string }> {
   const prompt = `You are Dyno Forms AI, an expert form digitization system. Analyze this uploaded document (${filename}) and extract all form elements into an Abstract Syntax Tree (AST) FormSchema JSON object.
 
 Rules:
@@ -447,8 +455,6 @@ Rules:
    }
 4. Return ONLY valid JSON without markdown wrapping.`;
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
-
   const requestBody = {
     contents: [
       {
@@ -472,25 +478,118 @@ Rules:
     },
   };
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(requestBody),
-  });
+  let lastError: Error | null = null;
 
-  if (!res.ok) {
-    const errorText = await res.text();
-    throw new Error(`Gemini Vision API error HTTP ${res.status}: ${errorText}`);
+  for (const model of CANDIDATE_GEMINI_MODELS) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.warn(`[AI Form Ingestion] Model "${model}" returned HTTP ${res.status}:`, errorText.substring(0, 150));
+        lastError = new Error(`Gemini Vision (${model}) HTTP ${res.status}: ${errorText}`);
+        continue;
+      }
+
+      const json = await res.json();
+      const rawText = json.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!rawText) {
+        lastError = new Error(`Gemini Vision (${model}) did not return candidate text content`);
+        continue;
+      }
+
+      let cleanJsonText = rawText.trim();
+      if (cleanJsonText.startsWith('```json')) {
+        cleanJsonText = cleanJsonText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+      } else if (cleanJsonText.startsWith('```')) {
+        cleanJsonText = cleanJsonText.replace(/^```\s*/, '').replace(/\s*```$/, '');
+      }
+
+      const parsed = JSON.parse(cleanJsonText);
+      return { schema: normalizeSchema(parsed), model };
+    } catch (err: any) {
+      console.warn(`[AI Form Ingestion] Model "${model}" failed:`, err.message);
+      lastError = err;
+    }
   }
 
-  const json = await res.json();
-  const rawText = json.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!rawText) {
-    throw new Error('Gemini Vision did not return candidate text content');
-  }
+  throw lastError || new Error('All candidate Gemini Vision models failed.');
+}
 
-  const parsed = JSON.parse(rawText);
-  return normalizeSchema(parsed);
+/**
+ * GET /api/convert-form
+ * Verifies if the Gemini API key is valid and tests candidate model connectivity
+ */
+export async function GET(request: NextRequest) {
+  try {
+    const customKey =
+      request.headers.get('x-gemini-key') ||
+      request.nextUrl.searchParams.get('key');
+    const geminiKey =
+      customKey ||
+      process.env.GEMINI_API_KEY ||
+      process.env.AI_API_KEY ||
+      process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+
+    if (!geminiKey) {
+      return NextResponse.json({
+        connected: false,
+        hasServerKey: false,
+        error: 'No Gemini API key configured. Provide an API key or set GEMINI_API_KEY in .env.',
+      });
+    }
+
+    let workingModel: string | null = null;
+    let lastErrorMsg = '';
+
+    for (const model of CANDIDATE_GEMINI_MODELS) {
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`;
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: 'ping' }] }],
+          }),
+        });
+
+        if (res.ok) {
+          workingModel = model;
+          break;
+        } else {
+          const errText = await res.text();
+          lastErrorMsg = `HTTP ${res.status}: ${errText.substring(0, 150)}`;
+        }
+      } catch (err: any) {
+        lastErrorMsg = err.message;
+      }
+    }
+
+    if (workingModel) {
+      return NextResponse.json({
+        connected: true,
+        model: workingModel,
+        hasServerKey: Boolean(process.env.GEMINI_API_KEY),
+        message: `Successfully connected to Google Gemini (${workingModel})`,
+      });
+    } else {
+      return NextResponse.json({
+        connected: false,
+        hasServerKey: Boolean(process.env.GEMINI_API_KEY),
+        error: lastErrorMsg || 'Unable to connect to Google Gemini models.',
+      });
+    }
+  } catch (err: any) {
+    return NextResponse.json(
+      { connected: false, error: err.message },
+      { status: 500 }
+    );
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -505,6 +604,7 @@ export async function POST(request: NextRequest) {
     const geminiKey =
       customKey ||
       process.env.GEMINI_API_KEY ||
+      process.env.AI_API_KEY ||
       process.env.NEXT_PUBLIC_GEMINI_API_KEY;
 
     if (contentType.includes('multipart/form-data')) {
@@ -525,16 +625,21 @@ export async function POST(request: NextRequest) {
 
     let synthesizedSchema: FormSchema;
     let conversionMode = 'heuristic-simulation';
+    let activeModel: string | null = null;
+    let conversionWarning: string | null = null;
 
     // If Gemini key and base64 file are provided, invoke live Gemini Vision API!
     if (geminiKey && fileBase64) {
       try {
-        synthesizedSchema = await callGeminiVision(fileBase64, fileMimeType, geminiKey, filename);
+        const result = await callGeminiVision(fileBase64, fileMimeType, geminiKey, filename);
+        synthesizedSchema = result.schema;
+        activeModel = result.model;
         conversionMode = 'gemini-vision-live';
       } catch (geminiErr: any) {
         console.warn('[AI Form Ingestion] Gemini Vision failed, falling back to heuristic:', geminiErr.message);
         synthesizedSchema = generateHeuristicSchema(filename);
         conversionMode = 'heuristic-fallback';
+        conversionWarning = geminiErr.message;
       }
     } else {
       // Simulate realistic OCR extraction time (600ms)
@@ -561,6 +666,8 @@ export async function POST(request: NextRequest) {
       success: true,
       filename,
       mode: conversionMode,
+      model: activeModel,
+      warning: conversionWarning,
       schema: synthesizedSchema,
       stats: {
         detectedFields: fieldCount,
@@ -576,3 +683,4 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+

@@ -24,6 +24,7 @@ export function StudioHeader() {
   const isDirty = useFormBuilderStore((s) => s.isDirty);
   const undo = useFormBuilderStore((s) => s.undo);
   const redo = useFormBuilderStore((s) => s.redo);
+  const resetSchema = useFormBuilderStore((s) => s.resetSchema);
   const canUndo = useFormBuilderStore((s) => s.past.length > 0);
   const canRedo = useFormBuilderStore((s) => s.future.length > 0);
 
@@ -59,6 +60,20 @@ export function StudioHeader() {
             </span>
             {isDirty && (
               <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" title="Unsaved changes in session" />
+            )}
+            {schema.id !== 'form_vendor_onboarding' && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirm('Reset canvas back to the default vendor onboarding form?')) {
+                    resetSchema();
+                  }
+                }}
+                title="Reset to default vendor sample"
+                className="text-[10px] font-semibold text-slate-500 hover:text-slate-800 px-2 py-0.5 rounded border border-slate-200 hover:bg-slate-50 transition-colors cursor-pointer"
+              >
+                Reset to Sample
+              </button>
             )}
           </div>
         </div>

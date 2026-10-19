@@ -77,6 +77,7 @@ export interface FormBuilderState {
   // Actions: Schema Lifecycle
   setSchema: (schema: FormSchema) => void;
   resetSchema: () => void;
+  hydrateFromStorage: () => void;
   exportSchemaJson: () => string;
   importSchemaJson: (jsonString: string) => { success: boolean; error?: string };
 
@@ -280,6 +281,11 @@ export const useFormBuilderStore = create<FormBuilderState>((set, get) => ({
   // Lifecycle
   setSchema: (newSchema) => {
     const { schema, past } = get();
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('dyno_active_schema', JSON.stringify(newSchema));
+      } catch (e) {}
+    }
     set({
       past: [...past.slice(-MAX_HISTORY_STEPS + 1), schema],
       future: [],
@@ -291,6 +297,11 @@ export const useFormBuilderStore = create<FormBuilderState>((set, get) => ({
 
   resetSchema: () => {
     const { schema, past } = get();
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem('dyno_active_schema');
+      } catch (e) {}
+    }
     set({
       past: [...past.slice(-MAX_HISTORY_STEPS + 1), schema],
       future: [],
@@ -298,6 +309,19 @@ export const useFormBuilderStore = create<FormBuilderState>((set, get) => ({
       selectedNodeId: null,
       isDirty: false,
     });
+  },
+
+  hydrateFromStorage: () => {
+    if (typeof window === 'undefined') return;
+    try {
+      const stored = localStorage.getItem('dyno_active_schema');
+      if (stored) {
+        const parsed = JSON.parse(stored) as FormSchema;
+        if (parsed?.root && Array.isArray(parsed.root.children)) {
+          set({ schema: parsed, isDirty: false });
+        }
+      }
+    } catch (e) {}
   },
 
   exportSchemaJson: () => {

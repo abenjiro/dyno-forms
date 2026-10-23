@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { FormSchema, FormNode, isContainerNode } from '@/types/schema';
+import { saveFormSchema } from '@/runtime/serverSchemaStorage';
 
 /**
  * Normalizes and validates an AST schema returned from AI or heuristic generator
@@ -661,6 +662,13 @@ export async function POST(request: NextRequest) {
       }
     }
     countNodes(synthesizedSchema.root);
+
+    // Persist synthesized schema to server store so public form URLs and resume links work immediately
+    try {
+      saveFormSchema(synthesizedSchema);
+    } catch (saveErr) {
+      console.warn('[AI Form Ingestion] Could not auto-save schema to storage:', saveErr);
+    }
 
     return NextResponse.json({
       success: true,

@@ -3,9 +3,12 @@
  * Hybrid Local (localStorage) + Remote Resume Token API
  */
 
+import { FormSchema } from '@/types/schema';
+
 export interface LocalDraftData {
   formId: string;
   values: Record<string, any>;
+  schema?: FormSchema;
   progress: number;
   savedAt: string;
 }
@@ -18,7 +21,8 @@ const DRAFT_PREFIX = 'dyno_form_draft_';
 export async function saveLocalDraft(
   formId: string,
   values: Record<string, any>,
-  progress: number
+  progress: number,
+  schema?: FormSchema
 ): Promise<void> {
   if (typeof window === 'undefined') return;
 
@@ -26,6 +30,7 @@ export async function saveLocalDraft(
     const payload: LocalDraftData = {
       formId,
       values,
+      schema,
       progress,
       savedAt: new Date().toISOString(),
     };
@@ -69,14 +74,15 @@ export async function clearLocalDraft(formId: string): Promise<void> {
  */
 export async function saveServerDraft(
   formId: string,
-  values: Record<string, any>
+  values: Record<string, any>,
+  schema?: FormSchema
 ): Promise<{ draftId: string; resumeToken: string; resumeUrl: string; savedAt: string }> {
   const response = await fetch(`/api/forms/${encodeURIComponent(formId)}/drafts`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ values }),
+    body: JSON.stringify({ values, schema }),
   });
 
   if (!response.ok) {
@@ -93,7 +99,14 @@ export async function saveServerDraft(
 export async function loadServerDraft(
   formId: string,
   resumeToken: string
-): Promise<{ values: Record<string, any>; savedAt: string } | null> {
+): Promise<{
+  draftId: string;
+  formId: string;
+  resumeToken: string;
+  values: Record<string, any>;
+  schema?: FormSchema;
+  savedAt: string;
+} | null> {
   const response = await fetch(
     `/api/forms/${encodeURIComponent(formId)}/drafts/${encodeURIComponent(resumeToken)}`
   );
@@ -105,7 +118,11 @@ export async function loadServerDraft(
 
   const data = await response.json();
   return {
+    draftId: data.draftId,
+    formId: data.formId,
+    resumeToken: data.resumeToken,
     values: data.values || {},
+    schema: data.schema,
     savedAt: data.savedAt,
   };
 }

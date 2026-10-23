@@ -233,7 +233,10 @@ export function BuilderCanvas() {
         {previewMode === 'preview' ? (
           /* Live Interactive Form Preview */
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 animate-fadeIn">
-            <FormRenderer schema={schema} />
+            <FormRenderer
+              key={`preview_${schema.id}_${schema.root.children.length}`}
+              schema={schema}
+            />
           </div>
         ) : (
           /* Visual Drag-and-Drop Canvas */

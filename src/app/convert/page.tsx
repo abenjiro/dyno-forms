@@ -184,10 +184,17 @@ export default function ConvertFormPage() {
     }
   };
 
-  const handleOpenInBuilder = () => {
+  const handleOpenInBuilder = async () => {
     if (convertedSchema) {
       if (typeof window !== 'undefined') {
         localStorage.setItem('dyno_active_schema', JSON.stringify(convertedSchema));
+        try {
+          await fetch(`/api/forms/${encodeURIComponent(convertedSchema.id)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ schema: convertedSchema }),
+          });
+        } catch (e) {}
       }
       setSchema(convertedSchema);
       router.push('/builder');

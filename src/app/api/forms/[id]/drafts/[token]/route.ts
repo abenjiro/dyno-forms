@@ -18,6 +18,7 @@ export async function GET(
       formId: draft.formId,
       resumeToken: draft.resumeToken,
       values: draft.values,
+      schema: draft.schema,
       savedAt: draft.updatedAt,
     });
   } catch (err: any) {

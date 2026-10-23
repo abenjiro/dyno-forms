@@ -5,12 +5,15 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { FormSchema } from '@/types/schema';
+import { saveFormSchema } from './serverSchemaStorage';
 
 export interface ServerDraft {
   draftId: string;
   formId: string;
   resumeToken: string;
   values: Record<string, any>;
+  schema?: FormSchema;
   savedAt: string;
   updatedAt: string;
 }
@@ -58,10 +61,24 @@ function savePersistedDrafts() {
 // Initial load
 loadPersistedDrafts();
 
-export function saveDraft(formId: string, values: Record<string, any>, existingToken?: string): ServerDraft {
+export function saveDraft(
+  formId: string,
+  values: Record<string, any>,
+  existingToken?: string,
+  schema?: FormSchema
+): ServerDraft {
   const resumeToken = existingToken || `dft_${Math.random().toString(36).substring(2, 10)}${Date.now().toString(36)}`;
   const draftId = `draft_${Math.random().toString(36).substring(2, 9)}`;
   const now = new Date().toISOString();
+
+  // If a schema was passed with the draft, ensure it's saved in the schema store
+  if (schema && schema.id) {
+    try {
+      saveFormSchema(schema);
+    } catch (e) {
+      console.warn('[DraftStorage] Could not persist draft schema:', e);
+    }
+  }
 
   const existing = draftsMap.get(resumeToken);
   const draft: ServerDraft = {
@@ -69,6 +86,7 @@ export function saveDraft(formId: string, values: Record<string, any>, existingT
     formId,
     resumeToken,
     values,
+    schema: schema || existing?.schema,
     savedAt: existing ? existing.savedAt : now,
     updatedAt: now,
   };

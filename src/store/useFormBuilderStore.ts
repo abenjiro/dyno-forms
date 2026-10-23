@@ -370,3 +370,16 @@ export const useFormBuilderStore = create<FormBuilderState>((set, get) => ({
     return getFieldNamesFromTree(schema.root);
   },
 }));
+
+// Auto-persist schema mutations to localStorage so browser refresh and previews always retain edits
+if (typeof window !== 'undefined') {
+  let prevSchema = useFormBuilderStore.getState().schema;
+  useFormBuilderStore.subscribe((state) => {
+    if (state.schema !== prevSchema) {
+      prevSchema = state.schema;
+      try {
+        localStorage.setItem('dyno_active_schema', JSON.stringify(state.schema));
+      } catch (e) {}
+    }
+  });
+}

@@ -13,7 +13,7 @@ export async function POST(
       return NextResponse.json({ error: 'Request body must contain a "values" object.' }, { status: 400 });
     }
 
-    const draft = saveDraft(id, body.values, body.resumeToken);
+    const draft = saveDraft(id, body.values, body.resumeToken, body.schema);
 
     return NextResponse.json({
       draftId: draft.draftId,

@@ -37,13 +37,14 @@ interface FormRendererProps {
 }
 
 export function FormRenderer({
-  schema,
+  schema: initialSchema,
   initialValues,
   resumeToken,
   onSubmit,
   readOnly = false,
   showDraftControls = true,
 }: FormRendererProps) {
+  const [activeSchema, setActiveSchema] = useState<FormSchema>(initialSchema);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState<{
     submissionId?: string;
@@ -51,6 +52,11 @@ export function FormRenderer({
     message?: string;
   } | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  // Sync activeSchema when initialSchema prop changes
+  useEffect(() => {
+    setActiveSchema(initialSchema);
+  }, [initialSchema]);
 
   // Draft & Auto-save states
   const [lastAutoSaved, setLastAutoSaved] = useState<string | null>(null);
@@ -60,13 +66,13 @@ export function FormRenderer({
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Compile dynamic Zod validation schema
-  const zodSchema = useMemo(() => buildZodSchema(schema), [schema]);
+  const zodSchema = useMemo(() => buildZodSchema(activeSchema), [activeSchema]);
 
   // Extract all fields to calculate defaults and completion progress
   const allFieldNodes = useMemo(() => {
-    const flattened = flattenTree(schema.root);
+    const flattened = flattenTree(activeSchema.root);
     return flattened.filter((n): n is FieldNode => isFieldNode(n) && Boolean(n.name));
-  }, [schema.root]);
+  }, [activeSchema.root]);
 
   const defaultFormValues = useMemo(() => {
     const defaults: Record<string, any> = {};
@@ -95,8 +101,8 @@ export function FormRenderer({
   const currentValues = watch();
 
   // Multi-Step Form Wizard mode setup
-  const isWizardMode = schema.settings.layoutMode === 'wizard' && schema.root.children.length > 1;
-  const wizardSteps = schema.root.children;
+  const isWizardMode = activeSchema.settings.layoutMode === 'wizard' && activeSchema.root.children.length > 1;
+  const wizardSteps = activeSchema.root.children;
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
 
   // Field names belonging to the current step (for step validation before advancing)
@@ -145,10 +151,14 @@ export function FormRenderer({
     let isMounted = true;
 
     async function hydrateDraft() {
+      // 1. If an explicit server resume token is provided, hydrate that draft session
       if (resumeToken) {
         try {
-          const serverDraft = await loadServerDraft(schema.id, resumeToken);
+          const serverDraft = await loadServerDraft(activeSchema.id, resumeToken);
           if (serverDraft && isMounted) {
+            if (serverDraft.schema) {
+              setActiveSchema(serverDraft.schema);
+            }
             reset(serverDraft.values);
             setLastAutoSaved(new Date(serverDraft.savedAt).toLocaleTimeString());
             return;
@@ -158,9 +168,10 @@ export function FormRenderer({
         }
       }
 
-      if (!initialValues) {
-        const local = await loadLocalDraft(schema.id);
-        if (local && isMounted && Object.keys(local.values).length > 0) {
+      // 2. Otherwise restore previously saved local values for this form if available
+      if (!initialValues && !resumeToken) {
+        const local = await loadLocalDraft(activeSchema.id);
+        if (local && isMounted && local.values && Object.keys(local.values).length > 0) {
           reset(local.values);
           setLastAutoSaved(new Date(local.savedAt).toLocaleTimeString());
         }
@@ -171,11 +182,11 @@ export function FormRenderer({
     return () => {
       isMounted = false;
     };
-  }, [schema.id, resumeToken, initialValues, reset]);
+  }, [activeSchema.id, resumeToken, initialValues, reset]);
 
   // Debounced auto-save to local storage (1500ms debounce)
   useEffect(() => {
-    if (!schema.settings.enableDrafts || readOnly) return;
+    if (!activeSchema.settings.enableDrafts || readOnly) return;
     if (submitSuccess) return;
 
     if (autoSaveTimerRef.current) {
@@ -184,23 +195,23 @@ export function FormRenderer({
 
     autoSaveTimerRef.current = setTimeout(async () => {
       if (isDirty) {
-        await saveLocalDraft(schema.id, currentValues, progressPercent);
+        await saveLocalDraft(activeSchema.id, currentValues, progressPercent, activeSchema);
         setLastAutoSaved(new Date().toLocaleTimeString());
       }
-    }, schema.settings.draftAutoSaveIntervalMs || 1500);
+    }, activeSchema.settings.draftAutoSaveIntervalMs || 1500);
 
     return () => {
       if (autoSaveTimerRef.current) {
         clearTimeout(autoSaveTimerRef.current);
       }
     };
-  }, [currentValues, isDirty, schema.id, schema.settings.enableDrafts, schema.settings.draftAutoSaveIntervalMs, progressPercent, readOnly, submitSuccess]);
+  }, [currentValues, isDirty, activeSchema, progressPercent, readOnly, submitSuccess]);
 
   // Save server draft & generate resume link
   const handleGenerateResumeLink = async () => {
     try {
       setIsSavingServerDraft(true);
-      const res = await saveServerDraft(schema.id, currentValues);
+      const res = await saveServerDraft(activeSchema.id, currentValues, activeSchema);
       const fullUrl = `${window.location.origin}${res.resumeUrl}`;
       setServerResumeUrl(fullUrl);
     } catch (err: any) {
@@ -226,12 +237,12 @@ export function FormRenderer({
     try {
       if (onSubmit) {
         await onSubmit(data);
-      } else if (schema.settings.submitUrl) {
-        const response = await fetch(schema.settings.submitUrl, {
-          method: schema.settings.submitMethod || 'POST',
+      } else if (activeSchema.settings.submitUrl) {
+        const response = await fetch(activeSchema.settings.submitUrl, {
+          method: activeSchema.settings.submitMethod || 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            formId: schema.id,
+            formId: activeSchema.id,
             data,
             submittedAt: new Date().toISOString(),
           }),
@@ -259,7 +270,7 @@ export function FormRenderer({
       }
 
       // Clear local draft upon successful submission
-      await clearLocalDraft(schema.id);
+      await clearLocalDraft(activeSchema.id);
     } catch (err: any) {
       setSubmitError(err.message || 'Submission failed. Please check your network and try again.');
     } finally {
@@ -305,11 +316,11 @@ export function FormRenderer({
         {/* Form Title & Header */}
         <header className="mb-8">
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-            {schema.title}
+            {activeSchema.title}
           </h1>
-          {schema.description && (
+          {activeSchema.description && (
             <p className="text-sm sm:text-base text-slate-600 mt-2 leading-relaxed">
-              {schema.description}
+              {activeSchema.description}
             </p>
           )}
 
@@ -335,7 +346,7 @@ export function FormRenderer({
                 </span>
               )}
 
-              {showDraftControls && schema.settings.enableDrafts && !readOnly && (
+              {showDraftControls && activeSchema.settings.enableDrafts && !readOnly && (
                 <button
                   type="button"
                   onClick={handleGenerateResumeLink}
@@ -463,7 +474,7 @@ export function FormRenderer({
               </div>
             </div>
           ) : (
-            <FormNodeRenderer node={schema.root} />
+            <FormNodeRenderer node={activeSchema.root} />
           )}
 
           {/* Form Actions Footer */}
@@ -480,14 +491,14 @@ export function FormRenderer({
                     <span>← Previous Step</span>
                   </button>
                 ) : (
-                  schema.settings.showReset && (
+                  activeSchema.settings.showReset && (
                     <button
                       type="button"
                       onClick={() => reset(defaultFormValues)}
                       className="inline-flex items-center space-x-1.5 px-4 py-2.5 rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-700 font-medium text-sm transition-colors cursor-pointer"
                     >
                       <RotateCcw className="w-4 h-4" />
-                      <span>{schema.settings.resetLabel || 'Reset Form'}</span>
+                      <span>{activeSchema.settings.resetLabel || 'Reset Form'}</span>
                     </button>
                   )
                 )}
@@ -518,7 +529,7 @@ export function FormRenderer({
                         <span>Processing Submission...</span>
                       </>
                     ) : (
-                      <span>{schema.settings.submitLabel || 'Submit Form'}</span>
+                      <span>{activeSchema.settings.submitLabel || 'Submit Form'}</span>
                     )}
                   </button>
                 )}

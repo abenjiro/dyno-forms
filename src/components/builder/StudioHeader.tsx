@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useFormBuilderStore } from '@/store/useFormBuilderStore';
 import { SchemaModal } from './SchemaModal';
@@ -34,6 +34,46 @@ export function StudioHeader() {
   const setDeviceView = useFormBuilderStore((s) => s.setDeviceView);
 
   const [isSchemaModalOpen, setIsSchemaModalOpen] = useState(false);
+  const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Auto-sync schema to server so public form links and resume links always reflect current builder state
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    if (syncTimeoutRef.current) {
+      clearTimeout(syncTimeoutRef.current);
+    }
+
+    syncTimeoutRef.current = setTimeout(async () => {
+      try {
+        await fetch(`/api/forms/${encodeURIComponent(schema.id)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ schema }),
+        });
+      } catch (err) {
+        console.warn('[StudioHeader] Auto-persist schema failed:', err);
+      }
+    }, 1200);
+
+    return () => {
+      if (syncTimeoutRef.current) {
+        clearTimeout(syncTimeoutRef.current);
+      }
+    };
+  }, [schema]);
+
+  const handleOpenPublicForm = async () => {
+    try {
+      await fetch(`/api/forms/${encodeURIComponent(schema.id)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ schema }),
+      });
+    } catch (err) {
+      console.warn('[StudioHeader] Failed to sync schema before opening public form:', err);
+    }
+  };
 
   return (
     <>
@@ -198,6 +238,7 @@ export function StudioHeader() {
           <Link
             href={`/f/${encodeURIComponent(schema.id)}`}
             target="_blank"
+            onClick={handleOpenPublicForm}
             className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-sm shadow-blue-500/25 transition-colors"
           >
             <span>Public Form</span>

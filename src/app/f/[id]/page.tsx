@@ -3,6 +3,8 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { sampleFormSchema } from '@/data/initialSchema';
 import { FormRenderer } from '@/components/runtime/FormRenderer';
+import { getFormSchema } from '@/runtime/serverSchemaStorage';
+import { getDraft } from '@/runtime/serverDraftStorage';
 import { ArrowLeft, ShieldCheck, Layers } from 'lucide-react';
 
 interface FormPageProps {
@@ -14,17 +16,29 @@ export default async function FormPage({ params, searchParams }: FormPageProps) 
   const { id } = await params;
   const { resume: resumeToken } = await searchParams;
 
-  // In production/full DB mode, fetch schema by ID from storage.
-  // For demo/prototype, resolve sample schema if matching or if demo.
-  let schema = sampleFormSchema;
-  if (id !== 'demo' && id !== sampleFormSchema.id) {
-    // If not demo or sample id, we can still fall back or show 404 if unknown
-    // To allow flexible testing, we use sampleFormSchema as demo preview
-    schema = {
-      ...sampleFormSchema,
-      id,
-      title: `${sampleFormSchema.title} (${id})`,
-    };
+  // 1. Try to fetch the schema from the server schema store
+  let schema = getFormSchema(id);
+
+  // 2. If not found in server schema store, check if resumeToken contains the schema
+  if (!schema && resumeToken) {
+    const draft = getDraft(id, resumeToken);
+    if (draft?.schema) {
+      schema = draft.schema;
+    }
+  }
+
+  // 3. If still not found, check if it's the demo alias or default sample ID
+  if (!schema) {
+    if (id === 'demo' || id === sampleFormSchema.id) {
+      schema = sampleFormSchema;
+    } else {
+      // Graceful fallback for unknown forms
+      schema = {
+        ...sampleFormSchema,
+        id,
+        title: `${sampleFormSchema.title} (${id})`,
+      };
+    }
   }
 
   return (

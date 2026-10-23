@@ -17,7 +17,8 @@ import {
 } from '../runtime/conditionEvaluator';
 import { buildZodSchema } from '../runtime/validationBuilder';
 import { saveDraft, getDraft, deleteDraft } from '../runtime/serverDraftStorage';
-import { FormNode } from '../types/schema';
+import { saveFormSchema, getFormSchema, deleteFormSchema } from '../runtime/serverSchemaStorage';
+import { FormNode, FormSchema } from '../types/schema';
 
 console.log('--- RUNNING DYNO FORMS CORE UNIT TESTS ---');
 
@@ -137,17 +138,64 @@ console.log('  ✓ Valid form payload passed dynamic Zod schema');
 
 // 4. Server Draft Storage Tests
 console.log('4. Testing Server Draft Storage...');
-const savedDraft = saveDraft('test_form_id', { companyName: 'Draft Company' });
+const customSchema: FormSchema = {
+  id: 'form_custom_test_999',
+  version: '1.0.0',
+  title: 'Custom Converted Job Application Form',
+  description: 'Customized form schema',
+  root: {
+    id: 'root_canvas',
+    type: 'canvas',
+    isContainer: true,
+    children: [
+      {
+        id: 'field_candidate_name',
+        type: 'text',
+        name: 'candidateName',
+        label: 'Candidate Full Name',
+        validation: { required: true },
+      },
+    ],
+  },
+  settings: {
+    enableDrafts: true,
+    draftAutoSaveIntervalMs: 1500,
+  },
+};
+
+const savedDraft = saveDraft('form_custom_test_999', { candidateName: 'Alice Smith' }, undefined, customSchema);
 assert(savedDraft.resumeToken.length > 5, 'Resume token should be generated');
-assert(savedDraft.values.companyName === 'Draft Company', 'Draft values should match');
+assert(savedDraft.values.candidateName === 'Alice Smith', 'Draft values should match');
+assert(savedDraft.schema?.title === 'Custom Converted Job Application Form', 'Draft should retain custom schema');
 
-const retrievedDraft = getDraft('test_form_id', savedDraft.resumeToken);
+const retrievedDraft = getDraft('form_custom_test_999', savedDraft.resumeToken);
 assert(retrievedDraft !== null && retrievedDraft.draftId === savedDraft.draftId, 'Draft should be retrievable by token');
-console.log('  ✓ saveDraft & getDraft passed');
+assert(retrievedDraft.schema?.id === 'form_custom_test_999', 'Retrieved draft should have custom schema');
+console.log('  ✓ saveDraft & getDraft with custom schema passed');
 
-const deleted = deleteDraft('test_form_id', savedDraft.resumeToken);
+// Test that saving draft with schema also persisted to serverSchemaStorage
+const retrievedSchemaFromStore = getFormSchema('form_custom_test_999');
+assert(retrievedSchemaFromStore !== null, 'Schema should be automatically stored in serverSchemaStorage');
+assert(retrievedSchemaFromStore.title === 'Custom Converted Job Application Form', 'Stored schema title should match');
+console.log('  ✓ Draft auto-persisted schema into serverSchemaStorage passed');
+
+// 5. Server Schema Storage Direct Tests
+console.log('5. Testing Server Schema Storage Direct Operations...');
+const standaloneSchema: FormSchema = {
+  ...customSchema,
+  id: 'form_standalone_888',
+  title: 'Standalone Direct Schema',
+};
+saveFormSchema(standaloneSchema);
+const foundStandalone = getFormSchema('form_standalone_888');
+assert(foundStandalone !== null && foundStandalone.title === 'Standalone Direct Schema', 'getFormSchema should retrieve saved schema');
+deleteFormSchema('form_standalone_888');
+assert(getFormSchema('form_standalone_888') === null, 'deleteFormSchema should remove schema');
+console.log('  ✓ saveFormSchema, getFormSchema, deleteFormSchema passed');
+
+const deleted = deleteDraft('form_custom_test_999', savedDraft.resumeToken);
 assert(deleted === true, 'Draft should be deleted');
-assert(getDraft('test_form_id', savedDraft.resumeToken) === null, 'Deleted draft should not exist');
+assert(getDraft('form_custom_test_999', savedDraft.resumeToken) === null, 'Deleted draft should not exist');
 console.log('  ✓ deleteDraft passed');
 
 console.log('--- ALL UNIT TESTS COMPLETED SUCCESSFULLY! ---');

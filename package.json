@@ -9,7 +9,12 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "test": "npx tsx src/tests/runtime.test.ts"
+    "test": "npx tsx src/tests/runtime.test.ts && npx tsx src/tests/db.test.ts",
+    "db:push": "prisma db push",
+    "db:seed": "npx tsx prisma/seed.ts"
+  },
+  "prisma": {
+    "seed": "npx tsx prisma/seed.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -17,9 +22,12 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@hookform/resolvers": "^3.10.0",
+    "@prisma/client": "^6.19.3",
     "@tanstack/react-query": "^5.66.0",
+    "bcryptjs": "^3.0.3",
     "clsx": "^2.1.1",
     "immer": "^10.1.1",
+    "jose": "^6.2.13",
     "lucide-react": "^0.475.0",
     "next": "^15.5.27",
     "react": "^19.0.0",
@@ -30,11 +38,13 @@
     "zustand": "^5.0.3"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
     "@types/node": "^22.13.4",
     "@types/react": "^19.0.8",
     "@types/react-dom": "^19.0.3",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.5.2",
+    "prisma": "^6.19.3",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.7.3"
   }

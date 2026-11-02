@@ -9,7 +9,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "test": "npx tsx src/tests/runtime.test.ts && npx tsx src/tests/db.test.ts",
+    "test": "npx tsx src/tests/runtime.test.ts && npx tsx src/tests/db.test.ts && npx tsx src/tests/auth.test.ts",
     "db:push": "prisma db push",
     "db:seed": "npx tsx prisma/seed.ts"
   },

@@ -17,9 +17,34 @@ services:
       - WATCHPACK_POLLING=true
       - NEXT_PUBLIC_MOCK_API_URL=${NEXT_PUBLIC_MOCK_API_URL:-http://localhost:4050}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - DATABASE_URL=${DOCKER_DATABASE_URL:-postgresql://dyno:dyno_secret@db:5432/dyno_forms?schema=public}
+      - JWT_SECRET=${JWT_SECRET:-dyno_jwt_super_secret_key_2026_phase2_min32chars}
+      - ENCRYPTION_MASTER_KEY=${ENCRYPTION_MASTER_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
     depends_on:
       mock-api:
         condition: service_healthy
+      db:
+        condition: service_healthy
+    networks:
+      - dyno-network
+
+  db:
+    image: postgres:16-alpine
+    container_name: dyno-forms-db
+    restart: unless-stopped
+    ports:
+      - "${DB_PORT:-5450}:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-dyno}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dyno_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-dyno_forms}
+    volumes:
+      - dyno-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dyno -d dyno_forms"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
     networks:
       - dyno-network
 
@@ -45,3 +70,6 @@ services:
 networks:
   dyno-network:
     driver: bridge
+
+volumes:
+  dyno-db-data:

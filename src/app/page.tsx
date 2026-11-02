@@ -1,5 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
+import { AuthNav } from '@/components/auth/AuthNav';
 import {
   Layers,
   Sparkles,
@@ -32,14 +33,16 @@ export default function HomePage() {
             </div>
           </div>
 
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-3">
             <Link
               href="/builder"
-              className="inline-flex items-center space-x-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm transition-colors shadow-sm shadow-blue-500/25"
+              className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium text-xs transition-colors"
             >
-              <Box className="w-4 h-4" />
-              <span>Open Visual Builder</span>
+              <Box className="w-3.5 h-3.5" />
+              <span>Studio Builder</span>
             </Link>
+
+            <AuthNav />
           </div>
         </div>
       </header>

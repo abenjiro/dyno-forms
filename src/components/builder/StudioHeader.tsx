@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useFormBuilderStore } from '@/store/useFormBuilderStore';
 import { SchemaModal } from './SchemaModal';
+import { AuthNav } from '@/components/auth/AuthNav';
 import {
   Layers,
   Undo2,
@@ -244,6 +245,10 @@ export function StudioHeader() {
             <span>Public Form</span>
             <ExternalLink className="w-3 h-3" />
           </Link>
+
+          <span className="text-slate-200">|</span>
+
+          <AuthNav />
         </div>
       </header>
 

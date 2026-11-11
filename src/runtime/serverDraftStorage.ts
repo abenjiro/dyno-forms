@@ -5,6 +5,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { FormSchema } from '@/types/schema';
 import { saveFormSchema } from './serverSchemaStorage';
 
@@ -68,7 +69,7 @@ export function saveDraft(
   schema?: FormSchema
 ): ServerDraft {
   const resumeToken = existingToken || `dft_${Math.random().toString(36).substring(2, 10)}${Date.now().toString(36)}`;
-  const draftId = `draft_${Math.random().toString(36).substring(2, 9)}`;
+  const draftId = crypto.randomUUID();
   const now = new Date().toISOString();
 
   // If a schema was passed with the draft, ensure it's saved in the schema store

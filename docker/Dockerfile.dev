@@ -8,6 +8,7 @@ RUN apk add --no-cache libc6-compat
 
 # Copy package descriptors first to maximize Docker layer caching
 COPY package*.json ./
+COPY prisma ./prisma/
 
 RUN npm install
 

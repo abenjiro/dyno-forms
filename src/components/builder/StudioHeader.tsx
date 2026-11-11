@@ -17,6 +17,7 @@ import {
   Code2,
   ExternalLink,
   Sparkles,
+  LayoutDashboard,
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -26,6 +27,7 @@ export function StudioHeader() {
   const undo = useFormBuilderStore((s) => s.undo);
   const redo = useFormBuilderStore((s) => s.redo);
   const resetSchema = useFormBuilderStore((s) => s.resetSchema);
+  const setSchema = useFormBuilderStore((s) => s.setSchema);
   const canUndo = useFormBuilderStore((s) => s.past.length > 0);
   const canRedo = useFormBuilderStore((s) => s.future.length > 0);
 
@@ -36,6 +38,23 @@ export function StudioHeader() {
 
   const [isSchemaModalOpen, setIsSchemaModalOpen] = useState(false);
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Load specific form schema if ?id=xxx is in URL
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const formId = params.get('id');
+    if (formId && formId !== schema.id) {
+      fetch(`/api/forms/${encodeURIComponent(formId)}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.schema) {
+            setSchema(data.schema);
+          }
+        })
+        .catch((err) => console.warn('[StudioHeader] Failed to load form schema:', err));
+    }
+  }, []);
 
   // Auto-sync schema to server so public form links and resume links always reflect current builder state
   useEffect(() => {
@@ -91,6 +110,14 @@ export function StudioHeader() {
             <span className="font-bold text-sm bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600">
               Dyno Forms
             </span>
+          </Link>
+
+          <Link
+            href="/dashboard"
+            className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg border border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-50 text-xs font-semibold transition-colors"
+          >
+            <LayoutDashboard className="w-3.5 h-3.5" />
+            <span>Dashboard</span>
           </Link>
 
           <span className="text-slate-300">|</span>

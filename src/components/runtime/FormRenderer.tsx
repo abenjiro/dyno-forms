@@ -263,7 +263,7 @@ export function FormRenderer({
         // Fallback simulate submission
         await new Promise((r) => setTimeout(r, 600));
         setSubmitSuccess({
-          submissionId: `sub_${Date.now()}`,
+          submissionId: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : '00000000-0000-4000-8000-000000000000',
           timestamp: new Date().toISOString(),
           message: 'Form response captured successfully!',
         });

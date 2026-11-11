@@ -4,12 +4,12 @@
   "description": "Enterprise Schema-Driven Drag-and-Drop Form Builder and Headless Runtime",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 3050",
-    "build": "next build",
+    "dev": "prisma generate && next dev -p 3050",
+    "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "test": "npx tsx src/tests/runtime.test.ts && npx tsx src/tests/db.test.ts && npx tsx src/tests/auth.test.ts",
+    "test": "npx tsx src/tests/runtime.test.ts && npx tsx src/tests/db.test.ts && npx tsx src/tests/auth.test.ts && npx tsx src/tests/forms-lifecycle.test.ts",
     "db:push": "prisma db push",
     "db:seed": "npx tsx prisma/seed.ts"
   },

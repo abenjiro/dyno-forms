@@ -11,6 +11,7 @@ import {
   Zap,
   CheckCircle2,
   Terminal,
+  LayoutDashboard,
 } from 'lucide-react';
 
 export default function HomePage() {
@@ -34,6 +35,14 @@ export default function HomePage() {
           </div>
 
           <div className="flex items-center space-x-3">
+            <Link
+              href="/dashboard"
+              className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium text-xs transition-colors"
+            >
+              <LayoutDashboard className="w-3.5 h-3.5" />
+              <span>Dashboard</span>
+            </Link>
+
             <Link
               href="/builder"
               className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium text-xs transition-colors"

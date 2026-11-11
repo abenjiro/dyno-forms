@@ -1,6 +1,7 @@
 import assert from 'node:assert';
 import prisma from '../lib/db';
 import crypto from 'node:crypto';
+import { sampleFormSchema } from '../data/initialSchema';
 
 console.log('--- RUNNING DYNO FORMS POSTGRESQL & PRISMA INTEGRATION TESTS ---');
 
@@ -18,19 +19,19 @@ async function runDbTests() {
   // 2. Test Form retrieval with JSONB schema
   console.log('2. Testing Form JSONB Schema Querying...');
   const form = await prisma.form.findUnique({
-    where: { id: 'form_enterprise_onboarding' },
+    where: { id: sampleFormSchema.id },
     include: { group: true, org: true },
   });
   assert(form !== null, 'Seeded form should exist in database');
   assert(form.status === 'published', 'Form status should be published');
   assert(typeof form.schema === 'object' && form.schema !== null, 'Form schema should be JSON object');
-  assert((form.schema as any).id === 'form_enterprise_onboarding', 'Form schema AST ID should match');
+  assert((form.schema as any).id === sampleFormSchema.id, 'Form schema AST ID should match');
   assert(form.group?.name === '2025/2026 Academic Admissions', 'Form should belong to 2025/2026 cohort');
   console.log(`  ✓ Form retrieved with AST schema: "${form.title}" (Group: ${form.group?.name})`);
 
   // 3. Test Submission Creation with JSONB payload
   console.log('3. Testing Submission Record Creation & JSONB Indexing...');
-  const testSubId = `sub_test_${Date.now()}`;
+  const testSubId = crypto.randomUUID();
   const submission = await prisma.submission.create({
     data: {
       id: testSubId,

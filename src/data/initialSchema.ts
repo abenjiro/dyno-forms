@@ -1,7 +1,7 @@
 import { FormSchema } from '../types/schema';
 
 export const sampleFormSchema: FormSchema = {
-  id: 'form_enterprise_onboarding',
+  id: 'a0000000-0000-4000-8000-000000000001',
   version: '1.0.0',
   title: 'Enterprise Vendor & Partner Application',
   description: 'Please complete all required sections to initiate enterprise vendor verification.',

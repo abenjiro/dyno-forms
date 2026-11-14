@@ -19,6 +19,7 @@ import {
   Trash2,
   Clock,
   Users,
+  Ticket,
   CheckCircle2,
   AlertCircle,
   FileText,
@@ -612,6 +613,15 @@ export default function DashboardPage() {
                     >
                       <Users className="w-3 h-3" />
                       <span>Data</span>
+                    </Link>
+
+                    <Link
+                      href={`/dashboard/forms/${form.id}/vouchers`}
+                      className="inline-flex items-center space-x-1 text-slate-600 hover:text-purple-600 text-xs font-semibold"
+                      title="Manage Vouchers"
+                    >
+                      <Ticket className="w-3 h-3" />
+                      <span>Vouchers</span>
                     </Link>
 
                     <Link

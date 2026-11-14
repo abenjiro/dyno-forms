@@ -204,6 +204,15 @@ export default function SubmissionsPage({ params }: { params: Promise<{ id: stri
           </div>
 
           <div className="flex items-center space-x-3">
+            <Link
+              href={`/dashboard/forms/${encodeURIComponent(id)}/vouchers`}
+              className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-xs transition-colors"
+              title="Manage Vouchers"
+            >
+              <Ticket className="w-3.5 h-3.5 text-purple-600" />
+              <span>Vouchers</span>
+            </Link>
+
             {form && (
               <a
                 href={`/api/forms/${encodeURIComponent(form.id)}/submissions/export`}

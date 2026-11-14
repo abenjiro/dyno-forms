@@ -23,6 +23,8 @@ import {
   Copy,
   Check,
   AlertTriangle,
+  AlertCircle,
+  Ticket,
   X,
 } from 'lucide-react';
 import clsx from 'clsx';
@@ -64,6 +66,44 @@ export function FormRenderer({
   const [serverResumeUrl, setServerResumeUrl] = useState<string | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Voucher Code state
+  const [voucherInput, setVoucherInput] = useState('');
+  const [isVerifyingVoucher, setIsVerifyingVoucher] = useState(false);
+  const [voucherError, setVoucherError] = useState<string | null>(null);
+  const [appliedVoucher, setAppliedVoucher] = useState<{
+    code: string;
+    codeMasked: string;
+    discountSummary: string;
+  } | null>(null);
+
+  const handleVerifyVoucher = async () => {
+    if (!voucherInput.trim()) return;
+    setIsVerifyingVoucher(true);
+    setVoucherError(null);
+    try {
+      const res = await fetch(`/api/forms/${encodeURIComponent(activeSchema.id)}/vouchers/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: voucherInput.trim() }),
+      });
+      const data = await res.json();
+      if (data.valid) {
+        setAppliedVoucher({
+          code: voucherInput.trim().toUpperCase(),
+          codeMasked: data.codeMasked,
+          discountSummary: data.discountSummary,
+        });
+        setVoucherInput('');
+      } else {
+        setVoucherError(data.error || 'Invalid voucher code');
+      }
+    } catch (err: any) {
+      setVoucherError('Failed to verify voucher');
+    } finally {
+      setIsVerifyingVoucher(false);
+    }
+  };
 
   // Compile dynamic Zod validation schema
   const zodSchema = useMemo(() => buildZodSchema(activeSchema), [activeSchema]);
@@ -247,6 +287,7 @@ export function FormRenderer({
           body: JSON.stringify({
             formId: activeSchema.id,
             data,
+            voucherCode: appliedVoucher?.code || undefined,
             submittedAt: new Date().toISOString(),
           }),
         });
@@ -470,6 +511,93 @@ export function FormRenderer({
             </div>
           ) : (
             <FormNodeRenderer node={activeSchema.root} />
+          )}
+
+          {/* Voucher / Fee Waiver Input Section */}
+          {!readOnly && (!isWizardMode || currentStepIndex === wizardSteps.length - 1) && (
+            <div className="mt-8 p-4 rounded-2xl border border-slate-200/80 bg-slate-50/60 shadow-xs">
+              {appliedVoucher ? (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-emerald-50/80 border border-emerald-200 rounded-xl p-3">
+                  <div className="flex items-center space-x-2.5">
+                    <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                      <Ticket className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="flex items-center space-x-2">
+                        <span className="text-xs font-bold text-emerald-900 font-mono">
+                          {appliedVoucher.codeMasked}
+                        </span>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-200 text-emerald-800">
+                          {appliedVoucher.discountSummary}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-emerald-700 mt-0.5">
+                        Voucher verified and applied to this application.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAppliedVoucher(null);
+                      setVoucherInput('');
+                    }}
+                    className="inline-flex items-center space-x-1 text-xs font-semibold text-slate-500 hover:text-red-600 transition-colors self-end sm:self-center cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                    <span>Remove</span>
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <div className="flex items-center space-x-2 mb-2 text-xs font-semibold text-slate-700">
+                    <Ticket className="w-3.5 h-3.5 text-purple-600" />
+                    <span>Have an institutional voucher or fee waiver code?</span>
+                  </div>
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                    <div className="relative flex-1">
+                      <input
+                        type="text"
+                        placeholder="Enter voucher code (e.g. ADM-2026-XXXX)"
+                        value={voucherInput}
+                        onChange={(e) => {
+                          setVoucherInput(e.target.value.toUpperCase());
+                          if (voucherError) setVoucherError(null);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleVerifyVoucher();
+                          }
+                        }}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-mono uppercase text-slate-800 placeholder:normal-case placeholder:font-sans focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleVerifyVoucher}
+                      disabled={isVerifyingVoucher || !voucherInput.trim()}
+                      className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:pointer-events-none text-white rounded-xl text-xs font-semibold shadow-xs transition-colors shrink-0 flex items-center justify-center space-x-1.5 cursor-pointer"
+                    >
+                      {isVerifyingVoucher ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Verifying...</span>
+                        </>
+                      ) : (
+                        <span>Apply Voucher</span>
+                      )}
+                    </button>
+                  </div>
+                  {voucherError && (
+                    <p className="text-[11px] text-red-600 mt-2 flex items-center space-x-1">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                      <span>{voucherError}</span>
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
           )}
 
           {/* Form Actions Footer */}

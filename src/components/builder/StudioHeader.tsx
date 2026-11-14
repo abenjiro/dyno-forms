@@ -18,6 +18,7 @@ import {
   ExternalLink,
   Sparkles,
   LayoutDashboard,
+  Ticket,
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -262,6 +263,15 @@ export function StudioHeader() {
             <Code2 className="w-3.5 h-3.5" />
             <span>JSON AST</span>
           </button>
+
+          <Link
+            href={`/dashboard/forms/${encodeURIComponent(schema.id)}/vouchers`}
+            className="inline-flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg border border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 text-xs font-semibold transition-colors"
+            title="Manage Vouchers"
+          >
+            <Ticket className="w-3.5 h-3.5" />
+            <span>Vouchers</span>
+          </Link>
 
           <Link
             href={`/f/${encodeURIComponent(schema.id)}`}

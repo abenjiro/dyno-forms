@@ -152,6 +152,10 @@ export async function POST(request: NextRequest) {
             children: [],
           },
           settings: {
+            submitUrl: '/api/forms/submit',
+            submitMethod: 'POST',
+            submitLabel: 'Submit Form',
+            showReset: true,
             theme: { primaryColor: '#2563eb', borderRadius: 'md', density: 'comfortable' },
             layoutMode: 'single-page',
           },
@@ -162,9 +166,14 @@ export async function POST(request: NextRequest) {
       formSchema.title = title;
     }
 
-    const formSettings: FormSettings = body.settings || formSchema.settings || {
+    const formSettings: FormSettings = {
+      submitUrl: '/api/forms/submit',
+      submitMethod: 'POST',
+      submitLabel: 'Submit Form',
       theme: { primaryColor: '#2563eb', borderRadius: 'md', density: 'comfortable' },
       layoutMode: 'single-page',
+      ...(formSchema.settings || {}),
+      ...(body.settings || {}),
     };
 
     if (user?.activeOrg?.id) {
@@ -178,7 +187,7 @@ export async function POST(request: NextRequest) {
           title,
           slug,
           description,
-          status: body.status || 'draft',
+          status: body.status || 'published',
           currentVersion: 1,
           schema: formSchema as any,
           settings: formSettings as any,

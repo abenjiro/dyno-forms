@@ -172,6 +172,7 @@ export default function DashboardPage() {
           description: newDescription.trim() || undefined,
           groupId: newGroupId || undefined,
           template: newTemplate,
+          status: 'published',
         }),
       });
 
@@ -528,10 +529,14 @@ export default function DashboardPage() {
 
                   {/* Metadata Chips: Submissions, Expiration */}
                   <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-                    <span className="flex items-center space-x-1 font-semibold text-slate-700">
+                    <Link
+                      href={`/dashboard/forms/${form.id}/submissions`}
+                      className="flex items-center space-x-1 font-semibold text-slate-700 hover:text-blue-600 transition-colors"
+                      title="View form submissions"
+                    >
                       <Users className="w-3.5 h-3.5 text-slate-400" />
                       <span>{form.submissionCount} submissions</span>
-                    </span>
+                    </Link>
 
                     {form.expiresAt ? (
                       <span className="flex items-center space-x-1 text-amber-600 text-[11px]">
@@ -601,6 +606,15 @@ export default function DashboardPage() {
 
                   <div className="flex items-center space-x-2">
                     <Link
+                      href={`/dashboard/forms/${form.id}/submissions`}
+                      className="inline-flex items-center space-x-1 text-slate-600 hover:text-blue-600 text-xs font-semibold"
+                      title="View Responses"
+                    >
+                      <Users className="w-3 h-3" />
+                      <span>Data</span>
+                    </Link>
+
+                    <Link
                       href={`/f/${form.id}`}
                       target="_blank"
                       className="inline-flex items-center space-x-1 text-slate-600 hover:text-slate-900 text-xs font-semibold"
@@ -667,7 +681,14 @@ export default function DashboardPage() {
                       </span>
                     </td>
                     <td className="py-3.5 px-4 font-semibold text-slate-800">
-                      {form.submissionCount}
+                      <Link
+                        href={`/dashboard/forms/${form.id}/submissions`}
+                        className="inline-flex items-center space-x-1.5 text-blue-600 hover:text-blue-800 hover:underline"
+                        title="View Submissions"
+                      >
+                        <Users className="w-3.5 h-3.5" />
+                        <span>{form.submissionCount}</span>
+                      </Link>
                     </td>
                     <td className="py-3.5 px-4 text-slate-500">
                       {new Date(form.updatedAt).toLocaleDateString()}

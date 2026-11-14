@@ -237,9 +237,12 @@ export function FormRenderer({
     try {
       if (onSubmit) {
         await onSubmit(data);
-      } else if (activeSchema.settings.submitUrl) {
-        const response = await fetch(activeSchema.settings.submitUrl, {
-          method: activeSchema.settings.submitMethod || 'POST',
+      } else {
+        const submitUrl = activeSchema.settings?.submitUrl || '/api/forms/submit';
+        const submitMethod = activeSchema.settings?.submitMethod || 'POST';
+
+        const response = await fetch(submitUrl, {
+          method: submitMethod,
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             formId: activeSchema.id,
@@ -258,14 +261,6 @@ export function FormRenderer({
           submissionId: result.submissionId,
           timestamp: result.timestamp || new Date().toISOString(),
           message: result.message || 'Thank you! Your response has been securely recorded.',
-        });
-      } else {
-        // Fallback simulate submission
-        await new Promise((r) => setTimeout(r, 600));
-        setSubmitSuccess({
-          submissionId: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : '00000000-0000-4000-8000-000000000000',
-          timestamp: new Date().toISOString(),
-          message: 'Form response captured successfully!',
         });
       }
 

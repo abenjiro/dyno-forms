@@ -26,7 +26,20 @@ import {
   AlertCircle,
   Ticket,
   X,
+  CreditCard,
+  DollarSign,
+  Lock,
+  ShieldCheck,
+  Smartphone,
+  Globe,
+  ArrowRight,
 } from 'lucide-react';
+import {
+  calculateFeeBreakdown,
+  formatMoney,
+  PricingConfig,
+  PaymentGatewayType,
+} from '@/lib/payments';
 import clsx from 'clsx';
 
 interface FormRendererProps {
@@ -102,6 +115,95 @@ export function FormRenderer({
       setVoucherError('Failed to verify voucher');
     } finally {
       setIsVerifyingVoucher(false);
+    }
+  };
+
+  // Pricing & Monetization State
+  const pricingConfig: PricingConfig | null = (activeSchema.pricingConfig as unknown as PricingConfig) || null;
+  const isPrepaid = pricingConfig?.accessMode === 'prepaid' && (pricingConfig.basePrice || 0) > 0;
+  const isPostpaid = pricingConfig?.accessMode === 'postpaid' && (pricingConfig.basePrice || 0) > 0;
+
+  const feeBreakdown = useMemo(() => {
+    if (!pricingConfig || pricingConfig.accessMode === 'free' || !pricingConfig.basePrice) return null;
+    return calculateFeeBreakdown(
+      pricingConfig.basePrice,
+      pricingConfig.currency,
+      pricingConfig.feeBearer,
+      pricingConfig.platformFeePercent,
+      pricingConfig.gatewayFeePercent
+    );
+  }, [pricingConfig]);
+
+  const [isPrepaidUnlocked, setIsPrepaidUnlocked] = useState(false);
+  const [unlockToken, setUnlockToken] = useState<string | null>(null);
+  const [paymentReference, setPaymentReference] = useState<string | null>(null);
+  const [selectedGateway, setSelectedGateway] = useState<PaymentGatewayType>('stripe');
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
+
+  // Postpaid Checkout Modal State
+  const [isPostpaidCheckoutOpen, setIsPostpaidCheckoutOpen] = useState(false);
+  const [pendingSubmissionData, setPendingSubmissionData] = useState<Record<string, any> | null>(null);
+
+  const isFullyWaived = Boolean(
+    appliedVoucher && (appliedVoucher.discountSummary.includes('100%') || appliedVoucher.discountSummary.includes('Waiver'))
+  );
+  const canAccessFields = !isPrepaid || isPrepaidUnlocked || isFullyWaived;
+
+  const handleProcessPayment = async (mode: 'prepaid' | 'postpaid', submissionDataToSubmit?: Record<string, any>) => {
+    setIsProcessingPayment(true);
+    setPaymentError(null);
+    try {
+      // 1. Initialize Payment Session
+      const initRes = await fetch(`/api/forms/${encodeURIComponent(activeSchema.id)}/payments/initialize`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          gateway: selectedGateway,
+          payerEmail: watch('email') || watch('applicantEmail') || undefined,
+        }),
+      });
+
+      if (!initRes.ok) {
+        const err = await initRes.json();
+        throw new Error(err.error || 'Failed to initialize payment');
+      }
+
+      const initData = await initRes.json();
+
+      // 2. Complete/Verify Payment (Simulating gateway success for instant verification)
+      const verifyRes = await fetch(`/api/forms/${encodeURIComponent(activeSchema.id)}/payments/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          paymentId: initData.paymentId,
+          reference: initData.reference,
+        }),
+      });
+
+      if (!verifyRes.ok) {
+        const err = await verifyRes.json();
+        throw new Error(err.error || 'Payment verification failed');
+      }
+
+      const verifyData = await verifyRes.json();
+
+      if (mode === 'prepaid') {
+        setIsPrepaidUnlocked(true);
+        setUnlockToken(verifyData.unlockToken);
+        setPaymentReference(verifyData.reference);
+      } else if (mode === 'postpaid') {
+        const dataToPost = submissionDataToSubmit || pendingSubmissionData || watch();
+        setIsPostpaidCheckoutOpen(false);
+        await executeFinalSubmission(dataToPost, {
+          paymentId: verifyData.paymentId,
+          paymentReference: verifyData.reference,
+        });
+      }
+    } catch (err: any) {
+      setPaymentError(err.message || 'Payment transaction failed');
+    } finally {
+      setIsProcessingPayment(false);
     }
   };
 
@@ -270,7 +372,10 @@ export function FormRenderer({
   };
 
   // Form submission handler
-  const onFormSubmit = async (data: Record<string, any>) => {
+  const executeFinalSubmission = async (
+    data: Record<string, any>,
+    paymentMeta?: { paymentId?: string; paymentReference?: string }
+  ) => {
     setIsSubmitting(true);
     setSubmitError(null);
 
@@ -288,6 +393,9 @@ export function FormRenderer({
             formId: activeSchema.id,
             data,
             voucherCode: appliedVoucher?.code || undefined,
+            unlockToken: unlockToken || undefined,
+            paymentId: paymentMeta?.paymentId || undefined,
+            paymentReference: paymentMeta?.paymentReference || paymentReference || undefined,
             submittedAt: new Date().toISOString(),
           }),
         });
@@ -312,6 +420,15 @@ export function FormRenderer({
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const onFormSubmit = async (data: Record<string, any>) => {
+    if (isPostpaid && !isFullyWaived) {
+      setPendingSubmissionData(data);
+      setIsPostpaidCheckoutOpen(true);
+      return;
+    }
+    await executeFinalSubmission(data);
   };
 
   // Success view
@@ -448,8 +565,182 @@ export function FormRenderer({
           </div>
         )}
 
-        {/* Main Interactive Form Canvas */}
-        <form onSubmit={handleSubmit(onFormSubmit)} noValidate>
+        {/* Unlocked Banner for Prepaid / Waived Forms */}
+        {canAccessFields && (isPrepaidUnlocked || isFullyWaived) && isPrepaid && (
+          <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-900 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 shadow-xs animate-fadeIn">
+            <div className="flex items-center space-x-2.5">
+              <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                <CheckCircle2 className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="font-bold">Application Access Unlocked</p>
+                <p className="text-[11px] text-emerald-700">
+                  {appliedVoucher
+                    ? `Institutional waiver applied: ${appliedVoucher.discountSummary}`
+                    : 'Entrance payment verified. You may complete and submit the form.'}
+                </p>
+              </div>
+            </div>
+            {paymentReference && (
+              <span className="font-mono text-[10px] bg-white px-2 py-1 rounded-md border border-emerald-200 text-emerald-700">
+                Ref: {paymentReference}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* If Prepaid and Locked: Render Entrance Paywall Card */}
+        {!canAccessFields && feeBreakdown ? (
+          <div className="bg-white rounded-3xl border border-slate-200/90 shadow-xl p-6 sm:p-10 animate-fadeIn">
+            <div className="text-center max-w-lg mx-auto">
+              <div className="w-16 h-16 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center mx-auto mb-4">
+                <Lock className="w-8 h-8" />
+              </div>
+
+              <span className="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-purple-100 text-purple-800">
+                Prepaid Application Fee
+              </span>
+
+              <h2 className="text-xl sm:text-2xl font-black text-slate-900 mt-3">
+                Entrance Fee Required to Access Form
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-500 mt-2 leading-relaxed">
+                This application requires payment of an access fee before you can view and complete the questions.
+              </p>
+            </div>
+
+            {/* Price Breakdown Box */}
+            <div className="max-w-md mx-auto my-6 p-4 rounded-2xl bg-slate-50 border border-slate-200">
+              <div className="flex items-center justify-between border-b border-slate-200 pb-2 mb-2">
+                <span className="text-xs text-slate-600">Base Application Fee:</span>
+                <span className="text-xs font-semibold text-slate-800">
+                  {formatMoney(feeBreakdown.basePrice, feeBreakdown.currency)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between border-b border-slate-200 pb-2 mb-2">
+                <span className="text-xs text-slate-600">Platform & Gateway Fees:</span>
+                <span className="text-xs font-semibold text-slate-800">
+                  {feeBreakdown.feeBearer === 'client'
+                    ? formatMoney(feeBreakdown.totalFees, feeBreakdown.currency)
+                    : 'Included'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between pt-1">
+                <span className="text-sm font-bold text-slate-900">Total to Unlock:</span>
+                <span className="text-xl font-black text-purple-700">
+                  {formatMoney(feeBreakdown.totalCharged, feeBreakdown.currency)}
+                </span>
+              </div>
+            </div>
+
+            {/* Gateway Selection & Actions */}
+            <div className="max-w-md mx-auto space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  Choose Payment Method:
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedGateway('stripe')}
+                    className={clsx(
+                      'p-2.5 rounded-xl border text-center transition-all flex flex-col items-center justify-center space-y-1 cursor-pointer',
+                      selectedGateway === 'stripe'
+                        ? 'border-purple-600 bg-purple-50/60 text-purple-700 font-bold'
+                        : 'border-slate-200 hover:border-slate-300 text-slate-600'
+                    )}
+                  >
+                    <CreditCard className="w-4 h-4" />
+                    <span className="text-[11px]">Card / Stripe</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSelectedGateway('momo')}
+                    className={clsx(
+                      'p-2.5 rounded-xl border text-center transition-all flex flex-col items-center justify-center space-y-1 cursor-pointer',
+                      selectedGateway === 'momo'
+                        ? 'border-purple-600 bg-purple-50/60 text-purple-700 font-bold'
+                        : 'border-slate-200 hover:border-slate-300 text-slate-600'
+                    )}
+                  >
+                    <Smartphone className="w-4 h-4" />
+                    <span className="text-[11px]">MoMo / Mobile</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSelectedGateway('paystack')}
+                    className={clsx(
+                      'p-2.5 rounded-xl border text-center transition-all flex flex-col items-center justify-center space-y-1 cursor-pointer',
+                      selectedGateway === 'paystack'
+                        ? 'border-purple-600 bg-purple-50/60 text-purple-700 font-bold'
+                        : 'border-slate-200 hover:border-slate-300 text-slate-600'
+                    )}
+                  >
+                    <Globe className="w-4 h-4" />
+                    <span className="text-[11px]">Paystack</span>
+                  </button>
+                </div>
+              </div>
+
+              {paymentError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-600 flex items-center space-x-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{paymentError}</span>
+                </div>
+              )}
+
+              <button
+                type="button"
+                disabled={isProcessingPayment}
+                onClick={() => handleProcessPayment('prepaid')}
+                className="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-sm font-bold shadow-md shadow-purple-500/25 transition-all flex items-center justify-center space-x-2 cursor-pointer"
+              >
+                {isProcessingPayment ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Processing Payment...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Pay {formatMoney(feeBreakdown.totalCharged, feeBreakdown.currency)} & Unlock Form</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
+              </button>
+
+              {/* Or Voucher Code option */}
+              <div className="pt-4 border-t border-slate-200 text-center">
+                <span className="text-[11px] text-slate-400 block mb-2">
+                  Have an institutional fee voucher code?
+                </span>
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="text"
+                    placeholder="Enter voucher code (e.g. ADM-2026-XXXX)"
+                    value={voucherInput}
+                    onChange={(e) => setVoucherInput(e.target.value.toUpperCase())}
+                    className="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-xs font-mono uppercase text-slate-800"
+                  />
+                  <button
+                    type="button"
+                    disabled={isVerifyingVoucher || !voucherInput.trim()}
+                    onClick={handleVerifyVoucher}
+                    className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold cursor-pointer"
+                  >
+                    {isVerifyingVoucher ? 'Checking...' : 'Redeem'}
+                  </button>
+                </div>
+                {voucherError && (
+                  <p className="text-[11px] text-red-600 mt-1.5 text-left">{voucherError}</p>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* Main Interactive Form Canvas */
+          <form onSubmit={handleSubmit(onFormSubmit)} noValidate>
           {isWizardMode ? (
             <div className="space-y-6">
               {/* Stepper Navigation Bar */}
@@ -660,6 +951,129 @@ export function FormRenderer({
             </div>
           )}
         </form>
+        )}
+
+        {/* Postpaid Submission Payment Checkout Modal */}
+        {isPostpaidCheckoutOpen && feeBreakdown && (
+          <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div className="flex items-center space-x-2">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                    <CreditCard className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900">Application Fee Checkout</h3>
+                    <p className="text-xs text-slate-500">Complete payment to finalize submission</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsPostpaidCheckoutOpen(false)}
+                  className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Fee Breakdown */}
+              <div className="my-4 p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+                <div className="flex justify-between text-xs text-slate-600">
+                  <span>Form Submission Fee:</span>
+                  <span className="font-semibold text-slate-800">
+                    {formatMoney(feeBreakdown.basePrice, feeBreakdown.currency)}
+                  </span>
+                </div>
+                <div className="flex justify-between text-xs text-slate-600">
+                  <span>Platform & Gateway Fee:</span>
+                  <span className="font-semibold text-slate-800">
+                    {feeBreakdown.feeBearer === 'client'
+                      ? formatMoney(feeBreakdown.totalFees, feeBreakdown.currency)
+                      : 'Included'}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm font-bold text-slate-900 pt-2 border-t border-slate-200">
+                  <span>Total Due:</span>
+                  <span className="text-lg font-black text-emerald-700">
+                    {formatMoney(feeBreakdown.totalCharged, feeBreakdown.currency)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Gateway Selector */}
+              <div className="space-y-3">
+                <label className="block text-xs font-semibold text-slate-700">Payment Gateway</label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedGateway('stripe')}
+                    className={clsx(
+                      'p-2 rounded-xl border text-center transition-all flex flex-col items-center justify-center space-y-1 cursor-pointer',
+                      selectedGateway === 'stripe'
+                        ? 'border-emerald-600 bg-emerald-50/60 text-emerald-700 font-bold'
+                        : 'border-slate-200 hover:border-slate-300 text-slate-600'
+                    )}
+                  >
+                    <CreditCard className="w-4 h-4" />
+                    <span className="text-[10px]">Card</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedGateway('momo')}
+                    className={clsx(
+                      'p-2 rounded-xl border text-center transition-all flex flex-col items-center justify-center space-y-1 cursor-pointer',
+                      selectedGateway === 'momo'
+                        ? 'border-emerald-600 bg-emerald-50/60 text-emerald-700 font-bold'
+                        : 'border-slate-200 hover:border-slate-300 text-slate-600'
+                    )}
+                  >
+                    <Smartphone className="w-4 h-4" />
+                    <span className="text-[10px]">Mobile Money</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedGateway('paystack')}
+                    className={clsx(
+                      'p-2 rounded-xl border text-center transition-all flex flex-col items-center justify-center space-y-1 cursor-pointer',
+                      selectedGateway === 'paystack'
+                        ? 'border-emerald-600 bg-emerald-50/60 text-emerald-700 font-bold'
+                        : 'border-slate-200 hover:border-slate-300 text-slate-600'
+                    )}
+                  >
+                    <Globe className="w-4 h-4" />
+                    <span className="text-[10px]">Paystack</span>
+                  </button>
+                </div>
+
+                {paymentError && (
+                  <p className="text-xs text-red-600 mt-2 flex items-center space-x-1">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    <span>{paymentError}</span>
+                  </p>
+                )}
+
+                <button
+                  type="button"
+                  disabled={isProcessingPayment}
+                  onClick={() => handleProcessPayment('postpaid')}
+                  className="w-full mt-2 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold shadow-md shadow-emerald-500/20 transition-all flex items-center justify-center space-x-2 cursor-pointer"
+                >
+                  {isProcessingPayment ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Processing Payment & Submitting...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Confirm & Pay {formatMoney(feeBreakdown.totalCharged, feeBreakdown.currency)}</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </FormProvider>
   );

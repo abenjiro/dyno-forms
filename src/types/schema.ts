@@ -145,6 +145,7 @@ export interface FormSchema {
   title: string;
   description?: string;
   settings: FormSettings;
+  pricingConfig?: any;
   root: ContainerNode;
 }
 

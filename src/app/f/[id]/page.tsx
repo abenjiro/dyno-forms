@@ -154,6 +154,14 @@ export default async function FormPage({ params, searchParams }: FormPageProps) 
     }
   }
 
+  // Attach pricingConfig from database if present
+  if (dbForm?.pricingConfig && schema) {
+    schema = {
+      ...schema,
+      pricingConfig: dbForm.pricingConfig,
+    };
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
       {/* Top Banner & Navigation */}

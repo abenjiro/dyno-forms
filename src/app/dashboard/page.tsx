@@ -20,6 +20,7 @@ import {
   Clock,
   Users,
   Ticket,
+  DollarSign,
   CheckCircle2,
   AlertCircle,
   FileText,
@@ -625,6 +626,15 @@ export default function DashboardPage() {
                     </Link>
 
                     <Link
+                      href={`/dashboard/forms/${form.id}/pricing`}
+                      className="inline-flex items-center space-x-1 text-slate-600 hover:text-emerald-600 text-xs font-semibold"
+                      title="Monetization & Pricing"
+                    >
+                      <DollarSign className="w-3 h-3" />
+                      <span>Pricing</span>
+                    </Link>
+
+                    <Link
                       href={`/f/${form.id}`}
                       target="_blank"
                       className="inline-flex items-center space-x-1 text-slate-600 hover:text-slate-900 text-xs font-semibold"
@@ -726,6 +736,22 @@ export default function DashboardPage() {
                         >
                           <Sparkles className="w-3.5 h-3.5" />
                         </button>
+
+                        <Link
+                          href={`/dashboard/forms/${form.id}/vouchers`}
+                          className="p-1 rounded text-purple-600 hover:text-purple-800"
+                          title="Vouchers"
+                        >
+                          <Ticket className="w-3.5 h-3.5" />
+                        </Link>
+
+                        <Link
+                          href={`/dashboard/forms/${form.id}/pricing`}
+                          className="p-1 rounded text-emerald-600 hover:text-emerald-800"
+                          title="Monetization & Pricing"
+                        >
+                          <DollarSign className="w-3.5 h-3.5" />
+                        </Link>
 
                         <Link
                           href={`/f/${form.id}`}

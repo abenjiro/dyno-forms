@@ -18,6 +18,7 @@ import {
   Edit3,
   ExternalLink,
   Users,
+  DollarSign,
   X,
   FileSpreadsheet,
   Ban,
@@ -300,6 +301,15 @@ export default function VouchersPage({ params }: { params: Promise<{ id: string 
           </div>
 
           <div className="flex items-center space-x-2.5">
+            <Link
+              href={`/dashboard/forms/${encodeURIComponent(id)}/pricing`}
+              className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-xs transition-colors"
+              title="Monetization & Pricing"
+            >
+              <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Pricing</span>
+            </Link>
+
             <Link
               href={`/dashboard/forms/${encodeURIComponent(id)}/submissions`}
               className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-xs transition-colors"

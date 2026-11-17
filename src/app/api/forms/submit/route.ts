@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'node:crypto';
 import prisma from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { verifyPrepaidUnlockToken } from '@/lib/payments-server';
 
 const isUuid = (val: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val);
@@ -11,6 +12,9 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { formId, data, formVersion } = body;
     const voucherCode = body.voucherCode || data?.voucherCode || null;
+    const paymentReference = body.paymentReference || data?.paymentReference || null;
+    const paymentId = body.paymentId || data?.paymentId || null;
+    const unlockToken = body.unlockToken || data?.unlockToken || null;
 
     if (!formId || typeof formId !== 'string') {
       return NextResponse.json({ error: 'Missing formId parameter' }, { status: 400 });
@@ -123,7 +127,38 @@ export async function POST(request: NextRequest) {
       verifiedVoucher = foundVoucher;
     }
 
-    // 7. Atomic Database Transaction: Create Submission + Increment Counter + Redeem Voucher
+    // 7. Payment Verification for Monetized Forms
+    const pricing = form.pricingConfig as any;
+    const requiresPayment = pricing && pricing.accessMode !== 'free' && Number(pricing.basePrice) > 0;
+
+    let verifiedPayment: any = null;
+    let validUnlockToken = false;
+
+    if (unlockToken && typeof unlockToken === 'string') {
+      validUnlockToken = verifyPrepaidUnlockToken(form.id, unlockToken);
+    }
+
+    if (paymentReference || paymentId) {
+      verifiedPayment = await prisma.payment.findFirst({
+        where: {
+          formId: form.id,
+          OR: [
+            ...(paymentReference ? [{ gatewayReference: paymentReference }] : []),
+            ...(paymentId && isUuid(paymentId) ? [{ id: paymentId }] : []),
+          ],
+        },
+      });
+    }
+
+    const isFullyWaived = verifiedVoucher && verifiedVoucher.discountType === 'full_waiver';
+    if (requiresPayment && !isFullyWaived && !verifiedPayment && !validUnlockToken) {
+      return NextResponse.json(
+        { error: 'Payment or a valid voucher waiver is required to submit this form.' },
+        { status: 402 }
+      );
+    }
+
+    // 8. Atomic Database Transaction: Create Submission + Increment Counter + Redeem Voucher + Link Payment
     const submission = await prisma.$transaction(async (tx) => {
       // Concurrency check quota inside transaction
       const currentForm = await tx.form.findUnique({ where: { id: form.id } });
@@ -136,6 +171,12 @@ export async function POST(request: NextRequest) {
         throw new Error('This form has reached its maximum response quota cap.');
       }
 
+      const finalPaymentStatus = verifiedVoucher
+        ? 'voucher_waived'
+        : verifiedPayment || validUnlockToken
+        ? 'paid'
+        : 'free';
+
       const submissionId = crypto.randomUUID();
       const createdSubmission = await tx.submission.create({
         data: {
@@ -145,12 +186,24 @@ export async function POST(request: NextRequest) {
           submitterId: user?.id || null,
           voucherId: verifiedVoucher?.id || null,
           data: data,
-          paymentStatus: verifiedVoucher ? 'voucher_waived' : 'free',
+          paymentStatus: finalPaymentStatus,
           voucherCode: voucherCode ? voucherCode.toUpperCase().trim() : null,
           ipHash,
           userAgent,
         },
       });
+
+      // Link payment if present
+      if (verifiedPayment) {
+        await tx.payment.update({
+          where: { id: verifiedPayment.id },
+          data: {
+            submissionId: createdSubmission.id,
+            status: 'paid',
+            completedAt: new Date(),
+          },
+        });
+      }
 
       // Increment form submission count
       await tx.form.update({

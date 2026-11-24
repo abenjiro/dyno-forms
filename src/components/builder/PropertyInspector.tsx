@@ -14,6 +14,13 @@ import {
   Trash2,
   Info,
   Settings,
+  Lock,
+  Key,
+  CheckCircle2,
+  AlertCircle,
+  Eye,
+  EyeOff,
+  Loader2,
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -223,6 +230,100 @@ export function PropertyInspector() {
         [key]: val,
       },
     } as any);
+  };
+
+  // Vault secret state for selected node
+  const [secretInput, setSecretInput] = useState('');
+  const [showSecret, setShowSecret] = useState(false);
+  const [isVaultSaving, setIsVaultSaving] = useState(false);
+  const [vaultSuccess, setVaultSuccess] = useState<string | null>(null);
+  const [vaultError, setVaultError] = useState<string | null>(null);
+
+  const handleSaveSecret = async () => {
+    if (!selectedNode || !secretInput.trim()) return;
+    setIsVaultSaving(true);
+    setVaultError(null);
+    setVaultSuccess(null);
+    try {
+      const curApi = (selectedNode as any).dataSource?.api || {};
+      const chosenAuthType = curApi.authType || 'bearer';
+      const chosenHeaderName =
+        curApi.headerName || (chosenAuthType === 'api_key' ? 'X-API-Key' : 'Authorization');
+
+      const res = await fetch(`/api/forms/${encodeURIComponent(schema.id)}/secrets`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fieldId: selectedNode.id,
+          authType: chosenAuthType,
+          headerName: chosenHeaderName,
+          secret: secretInput.trim(),
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to encrypt secret');
+      }
+
+      updateNodeProps(selectedNode.id, {
+        dataSource: {
+          type: 'api',
+          api: {
+            ...curApi,
+            useProxy: true,
+            hasSecret: true,
+            authType: chosenAuthType,
+            headerName: chosenHeaderName,
+          },
+        },
+      } as any);
+
+      setSecretInput('');
+      setVaultSuccess('Encrypted with AES-256-GCM and saved to vault!');
+      setTimeout(() => setVaultSuccess(null), 4000);
+    } catch (err: any) {
+      setVaultError(err.message || 'Error saving secret');
+    } finally {
+      setIsVaultSaving(false);
+    }
+  };
+
+  const handleDeleteSecret = async () => {
+    if (!selectedNode) return;
+    setIsVaultSaving(true);
+    setVaultError(null);
+    setVaultSuccess(null);
+    try {
+      const res = await fetch(`/api/forms/${encodeURIComponent(schema.id)}/secrets`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fieldId: selectedNode.id }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to delete secret');
+      }
+
+      const curApi = (selectedNode as any).dataSource?.api || {};
+      updateNodeProps(selectedNode.id, {
+        dataSource: {
+          type: 'api',
+          api: {
+            ...curApi,
+            hasSecret: false,
+          },
+        },
+      } as any);
+
+      setVaultSuccess('Secret removed from vault');
+      setTimeout(() => setVaultSuccess(null), 3000);
+    } catch (err: any) {
+      setVaultError(err.message || 'Error deleting secret');
+    } finally {
+      setIsVaultSaving(false);
+    }
   };
 
   return (
@@ -614,6 +715,185 @@ export function PropertyInspector() {
                         </option>
                       ))}
                   </select>
+                </div>
+
+                {/* Secure Server Proxy & Vault */}
+                <div className="pt-3 border-t border-indigo-100 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-1.5">
+                      <Lock className="w-3.5 h-3.5 text-indigo-700" />
+                      <span className="text-xs font-bold text-slate-800">Secure Proxy & Vault</span>
+                    </div>
+                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700">
+                      AES-256
+                    </span>
+                  </div>
+
+                  <label className="flex items-start space-x-2 cursor-pointer bg-white p-2 rounded-lg border border-indigo-100/80 hover:border-indigo-200">
+                    <input
+                      type="checkbox"
+                      checked={Boolean((selectedNode as any).dataSource?.api?.useProxy)}
+                      onChange={(e) => {
+                        const cur = (selectedNode as any).dataSource?.api || {};
+                        updateNodeProps(selectedNode.id, {
+                          dataSource: {
+                            type: 'api',
+                            api: {
+                              ...cur,
+                              useProxy: e.target.checked,
+                            },
+                          },
+                        } as any);
+                      }}
+                      className="mt-0.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <div>
+                      <span className="text-xs font-semibold text-slate-800 block">
+                        Route through Secure Proxy
+                      </span>
+                      <span className="text-[11px] text-slate-500 block leading-tight">
+                        Hides API tokens from respondents & bypasses browser CORS restrictions.
+                      </span>
+                    </div>
+                  </label>
+
+                  {/* Vault Authentication & Secret Setup */}
+                  {Boolean((selectedNode as any).dataSource?.api?.useProxy) && (
+                    <div className="p-2.5 rounded-lg bg-indigo-50/70 border border-indigo-100 space-y-2.5">
+                      <div>
+                        <label className="text-[11px] font-semibold text-slate-700 block mb-1">
+                          Authentication Type
+                        </label>
+                        <select
+                          value={(selectedNode as any).dataSource?.api?.authType || 'bearer'}
+                          onChange={(e) => {
+                            const cur = (selectedNode as any).dataSource?.api || {};
+                            updateNodeProps(selectedNode.id, {
+                              dataSource: {
+                                type: 'api',
+                                api: {
+                                  ...cur,
+                                  authType: e.target.value,
+                                  headerName:
+                                    e.target.value === 'api_key'
+                                      ? cur.headerName || 'X-API-Key'
+                                      : cur.headerName || 'Authorization',
+                                },
+                              },
+                            } as any);
+                          }}
+                          className="w-full text-xs rounded border border-slate-300 px-2 py-1.5 bg-white text-slate-800"
+                        >
+                          <option value="bearer">Bearer Token (Authorization: Bearer ...)</option>
+                          <option value="api_key">API Key Header (e.g. X-API-Key)</option>
+                          <option value="basic">Basic Auth (Authorization: Basic ...)</option>
+                        </select>
+                      </div>
+
+                      {(selectedNode as any).dataSource?.api?.authType === 'api_key' && (
+                        <div>
+                          <label className="text-[11px] font-semibold text-slate-700 block mb-1">
+                            Header Name
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="X-API-Key"
+                            value={(selectedNode as any).dataSource?.api?.headerName || 'X-API-Key'}
+                            onChange={(e) => {
+                              const cur = (selectedNode as any).dataSource?.api || {};
+                              updateNodeProps(selectedNode.id, {
+                                dataSource: {
+                                  type: 'api',
+                                  api: { ...cur, headerName: e.target.value },
+                                },
+                              } as any);
+                            }}
+                            className="w-full text-xs font-mono rounded border border-slate-300 px-2 py-1.5 bg-white text-slate-800"
+                          />
+                        </div>
+                      )}
+
+                      {/* Secret Input & Vault Actions */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-[11px] font-semibold text-slate-700">
+                            Private Secret / Token
+                          </label>
+                          {(selectedNode as any).dataSource?.api?.hasSecret && (
+                            <span className="text-[10px] font-semibold text-emerald-600 flex items-center space-x-1">
+                              <CheckCircle2 className="w-3 h-3" />
+                              <span>Vaulted</span>
+                            </span>
+                          )}
+                        </div>
+
+                        {(selectedNode as any).dataSource?.api?.hasSecret ? (
+                          <div className="flex items-center justify-between p-2 rounded bg-emerald-50 border border-emerald-200">
+                            <span className="text-xs font-mono text-emerald-900 tracking-wider">
+                              ••••••••••••••••
+                            </span>
+                            <button
+                              type="button"
+                              onClick={handleDeleteSecret}
+                              disabled={isVaultSaving}
+                              className="text-[11px] font-medium text-red-600 hover:text-red-700 underline"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="space-y-1.5">
+                            <div className="relative">
+                              <input
+                                type={showSecret ? 'text' : 'password'}
+                                placeholder="Paste token or private key..."
+                                value={secretInput}
+                                onChange={(e) => setSecretInput(e.target.value)}
+                                className="w-full text-xs font-mono rounded border border-slate-300 pl-2.5 pr-8 py-1.5 bg-white text-slate-800"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowSecret(!showSecret)}
+                                className="absolute right-2 top-2 text-slate-400 hover:text-slate-600"
+                              >
+                                {showSecret ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                              </button>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={handleSaveSecret}
+                              disabled={isVaultSaving || !secretInput.trim()}
+                              className={clsx(
+                                'w-full inline-flex items-center justify-center space-x-1.5 px-2.5 py-1.5 rounded text-xs font-semibold text-white shadow-xs transition-all',
+                                isVaultSaving || !secretInput.trim()
+                                  ? 'bg-indigo-300 cursor-not-allowed'
+                                  : 'bg-indigo-600 hover:bg-indigo-700'
+                              )}
+                            >
+                              {isVaultSaving ? (
+                                <>
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  <span>Encrypting...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Key className="w-3.5 h-3.5" />
+                                  <span>Save Secret to Vault</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        )}
+
+                        {vaultSuccess && (
+                          <p className="text-[11px] text-emerald-600 mt-1 font-medium">{vaultSuccess}</p>
+                        )}
+                        {vaultError && (
+                          <p className="text-[11px] text-red-600 mt-1 font-medium">{vaultError}</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

@@ -4,6 +4,7 @@ import React from 'react';
 import { useFormContext } from 'react-hook-form';
 import { FieldNode, StaticOption } from '@/types/schema';
 import { useDynamicApiResolver } from '@/runtime/useDynamicApiResolver';
+import { useFormRuntime } from '../FormRenderer';
 import { FieldWrapper } from './FieldWrapper';
 import { Loader2 } from 'lucide-react';
 import clsx from 'clsx';
@@ -29,12 +30,18 @@ export function RadioInput({ field, disabled }: RadioInputProps) {
   const dependsOnField = dataSource?.api?.dependsOnField;
   const parentValue = dependsOnField ? watch(dependsOnField) : undefined;
 
+  const { formId } = useFormRuntime();
+
   const isApi = dataSource?.type === 'api';
   const {
     options: apiOptions,
     isLoading,
     isError,
-  } = useDynamicApiResolver(isApi ? dataSource?.api : undefined, parentValue);
+  } = useDynamicApiResolver(
+    isApi ? dataSource?.api : undefined,
+    parentValue,
+    { formId, fieldId: id }
+  );
 
   let options: StaticOption[] = [];
   if (isApi) {

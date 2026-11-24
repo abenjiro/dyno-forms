@@ -71,6 +71,10 @@ export interface ApiDataSourceConfig {
   dependsOnField?: string; // Cascading parent field name
   dependencyParamKey?: string; // Query param key for dependency (e.g. 'country_code')
   cacheTimeMs?: number;
+  useProxy?: boolean;      // Route query through server-side proxy to hide credentials & prevent SSRF
+  authType?: 'bearer' | 'api_key' | 'basic';
+  headerName?: string;
+  hasSecret?: boolean;     // Indicator if secret key is vaulted
 }
 
 export interface DataSourceConfig {

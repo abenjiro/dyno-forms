@@ -42,6 +42,14 @@ import {
 } from '@/lib/payments';
 import clsx from 'clsx';
 
+export interface FormRuntimeContextValue {
+  formId?: string;
+  readOnly?: boolean;
+}
+
+export const FormRuntimeContext = React.createContext<FormRuntimeContextValue>({});
+export const useFormRuntime = () => React.useContext(FormRuntimeContext);
+
 interface FormRendererProps {
   schema: FormSchema;
   initialValues?: Record<string, any>;
@@ -465,7 +473,8 @@ export function FormRenderer({
 
   return (
     <FormProvider {...methods}>
-      <div className="max-w-4xl mx-auto py-8 px-4 sm:px-6">
+      <FormRuntimeContext.Provider value={{ formId: activeSchema.id, readOnly }}>
+        <div className="max-w-4xl mx-auto py-8 px-4 sm:px-6">
         {/* Form Title & Header */}
         <header className="mb-8">
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
@@ -1074,7 +1083,8 @@ export function FormRenderer({
             </div>
           </div>
         )}
-      </div>
+        </div>
+      </FormRuntimeContext.Provider>
     </FormProvider>
   );
 }

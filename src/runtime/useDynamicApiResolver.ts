@@ -18,9 +18,15 @@ export function getNestedValue(obj: any, path: string): any {
   return current;
 }
 
+export interface DynamicApiResolverOptions {
+  formId?: string;
+  fieldId?: string;
+}
+
 export function useDynamicApiResolver(
   apiConfig?: ApiDataSourceConfig,
-  parentFieldValue?: any
+  parentFieldValue?: any,
+  resolverOptions?: DynamicApiResolverOptions
 ): {
   options: StaticOption[];
   isLoading: boolean;
@@ -33,30 +39,50 @@ export function useDynamicApiResolver(
 
   const isEnabled = Boolean(apiConfig?.url && dependencyReady);
 
+  const shouldUseProxy = Boolean(
+    apiConfig?.useProxy && resolverOptions?.formId && resolverOptions?.fieldId
+  );
+
   // Construct target URL with dependency parameter if present
-  let resolvedUrl = apiConfig?.url || '';
-  if (hasDependency && dependencyReady && resolvedUrl) {
-    const paramKey = apiConfig?.dependencyParamKey || apiConfig?.dependsOnField || 'parent';
-    try {
-      const urlObj = new URL(resolvedUrl, typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3050');
-      urlObj.searchParams.set(paramKey, String(parentFieldValue));
-      resolvedUrl = urlObj.toString();
-    } catch {
-      const separator = resolvedUrl.includes('?') ? '&' : '?';
-      resolvedUrl = `${resolvedUrl}${separator}${encodeURIComponent(paramKey)}=${encodeURIComponent(String(parentFieldValue))}`;
+  let resolvedUrl = '';
+
+  if (shouldUseProxy) {
+    const formId = resolverOptions!.formId!;
+    const fieldId = resolverOptions!.fieldId!;
+    const params = new URLSearchParams();
+    params.set('fieldId', fieldId);
+
+    if (hasDependency && dependencyReady) {
+      const paramKey = apiConfig?.dependencyParamKey || apiConfig?.dependsOnField || 'parent';
+      params.set(paramKey, String(parentFieldValue));
+    }
+
+    resolvedUrl = `/api/forms/${encodeURIComponent(formId)}/proxy-query?${params.toString()}`;
+  } else {
+    resolvedUrl = apiConfig?.url || '';
+    if (hasDependency && dependencyReady && resolvedUrl) {
+      const paramKey = apiConfig?.dependencyParamKey || apiConfig?.dependsOnField || 'parent';
+      try {
+        const urlObj = new URL(resolvedUrl, typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3050');
+        urlObj.searchParams.set(paramKey, String(parentFieldValue));
+        resolvedUrl = urlObj.toString();
+      } catch {
+        const separator = resolvedUrl.includes('?') ? '&' : '?';
+        resolvedUrl = `${resolvedUrl}${separator}${encodeURIComponent(paramKey)}=${encodeURIComponent(String(parentFieldValue))}`;
+      }
     }
   }
 
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ['dynamic-api-source', resolvedUrl, apiConfig?.dataArrayPath, apiConfig?.labelPath, apiConfig?.valuePath],
+    queryKey: ['dynamic-api-source', resolvedUrl, shouldUseProxy, apiConfig?.dataArrayPath, apiConfig?.labelPath, apiConfig?.valuePath],
     queryFn: async () => {
       let response: Response;
       try {
         response = await fetch(resolvedUrl, {
-          method: apiConfig?.method || 'GET',
+          method: shouldUseProxy ? 'GET' : (apiConfig?.method || 'GET'),
           headers: {
             'Content-Type': 'application/json',
-            ...(apiConfig?.headers || {}),
+            ...(!shouldUseProxy ? (apiConfig?.headers || {}) : {}),
           },
         });
 
@@ -65,12 +91,12 @@ export function useDynamicApiResolver(
         }
       } catch (primaryErr) {
         // Resilient fallback for local mock endpoints if 4050/4000 port is unreachable
-        if (resolvedUrl.includes('/api/countries')) {
+        if (!shouldUseProxy && resolvedUrl.includes('/api/countries')) {
           response = await fetch('/api/mock/countries');
-        } else if (resolvedUrl.includes('/api/states')) {
+        } else if (!shouldUseProxy && resolvedUrl.includes('/api/states')) {
           const countryParam = String(parentFieldValue || 'US');
           response = await fetch(`/api/mock/states?country=${encodeURIComponent(countryParam)}`);
-        } else if (resolvedUrl.includes('/api/industries')) {
+        } else if (!shouldUseProxy && resolvedUrl.includes('/api/industries')) {
           response = await fetch('/api/mock/industries');
         } else {
           throw primaryErr;
@@ -78,6 +104,11 @@ export function useDynamicApiResolver(
       }
 
       const json = await response.json();
+
+      // If proxied response, return sanitized server-normalized options directly
+      if (shouldUseProxy && json && Array.isArray(json.options)) {
+        return json.options as StaticOption[];
+      }
 
       // Extract array from payload
       let rawArray: any[] = [];

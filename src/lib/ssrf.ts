@@ -44,18 +44,25 @@ function isPrivateIp(ip: string): boolean {
   return false;
 }
 
+export interface SsrfValidationOptions {
+  allowLocal?: boolean;
+}
+
 /**
  * Validates a target URL against SSRF attacks before the server performs an outbound fetch.
  */
-export function validateUrlForSsrf(targetUrl: string): SsrfValidationResult {
+export function validateUrlForSsrf(
+  targetUrl: string,
+  options?: SsrfValidationOptions
+): SsrfValidationResult {
   if (!targetUrl || typeof targetUrl !== 'string') {
     return { allowed: false, reason: 'URL must be a non-empty string' };
   }
 
   const clean = targetUrl.trim();
 
-  // Allow relative app-internal mock API endpoints
-  if (clean.startsWith('/api/mock/')) {
+  // Allow relative app-internal endpoints (e.g. /api/mock/...)
+  if (clean.startsWith('/')) {
     return { allowed: true };
   }
 
@@ -75,14 +82,16 @@ export function validateUrlForSsrf(targetUrl: string): SsrfValidationResult {
   }
 
   const hostname = parsed.hostname.toLowerCase();
+  const isLocalAllowed = Boolean(options?.allowLocal || process.env.ALLOW_DEV_SSRF === 'true');
 
-  // Reject localhost and local domain names
+  // Reject localhost and local domain names (unless explicitly allowed in dev/test)
   if (
-    hostname === 'localhost' ||
-    hostname.endsWith('.localhost') ||
-    hostname.endsWith('.local') ||
-    hostname.endsWith('.internal') ||
-    hostname === '[::1]'
+    !isLocalAllowed &&
+    (hostname === 'localhost' ||
+      hostname.endsWith('.localhost') ||
+      hostname.endsWith('.local') ||
+      hostname.endsWith('.internal') ||
+      hostname === '[::1]')
   ) {
     return {
       allowed: false,
@@ -91,7 +100,7 @@ export function validateUrlForSsrf(targetUrl: string): SsrfValidationResult {
   }
 
   // Check direct IP address targets
-  if (isPrivateIp(hostname)) {
+  if (!isLocalAllowed && isPrivateIp(hostname)) {
     return {
       allowed: false,
       reason: `Direct connection to private/internal IP address "${hostname}" is prohibited`,

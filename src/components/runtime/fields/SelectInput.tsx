@@ -4,6 +4,7 @@ import React from 'react';
 import { useFormContext } from 'react-hook-form';
 import { FieldNode, StaticOption } from '@/types/schema';
 import { useDynamicApiResolver } from '@/runtime/useDynamicApiResolver';
+import { useFormRuntime } from '../FormRenderer';
 import { FieldWrapper } from './FieldWrapper';
 import { Loader2, AlertCircle } from 'lucide-react';
 import clsx from 'clsx';
@@ -28,6 +29,8 @@ export function SelectInput({ field, disabled }: SelectInputProps) {
   const dependsOnField = dataSource?.api?.dependsOnField;
   const parentValue = dependsOnField ? watch(dependsOnField) : undefined;
 
+  const { formId } = useFormRuntime();
+
   // Resolve dynamic options if API datasource
   const isApi = dataSource?.type === 'api';
   const {
@@ -35,7 +38,11 @@ export function SelectInput({ field, disabled }: SelectInputProps) {
     isLoading,
     isError,
     error: apiError,
-  } = useDynamicApiResolver(isApi ? dataSource?.api : undefined, parentValue);
+  } = useDynamicApiResolver(
+    isApi ? dataSource?.api : undefined,
+    parentValue,
+    { formId, fieldId: id }
+  );
 
   // Determine final options list
   let options: StaticOption[] = [];

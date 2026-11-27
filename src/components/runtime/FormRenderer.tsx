@@ -12,6 +12,8 @@ import {
   clearLocalDraft,
   saveServerDraft,
   loadServerDraft,
+  requestDraftOtp,
+  verifyDraftOtp,
 } from '@/runtime/draftManager';
 import { FormNodeRenderer } from './FormNodeRenderer';
 import {
@@ -33,6 +35,9 @@ import {
   Smartphone,
   Globe,
   ArrowRight,
+  KeyRound,
+  Mail,
+  RefreshCw,
 } from 'lucide-react';
 import {
   calculateFeeBreakdown,
@@ -87,6 +92,19 @@ export function FormRenderer({
   const [serverResumeUrl, setServerResumeUrl] = useState<string | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // OTP Draft Recovery states
+  const [isResumeModalOpen, setIsResumeModalOpen] = useState(false);
+  const [resumeTab, setResumeTab] = useState<'otp' | 'link'>('otp');
+  const [otpIdentifier, setOtpIdentifier] = useState('');
+  const [otpCode, setOtpCode] = useState('');
+  const [otpStep, setOtpStep] = useState<'request' | 'verify'>('request');
+  const [maskedTarget, setMaskedTarget] = useState<string | null>(null);
+  const [devOtp, setDevOtp] = useState<string | null>(null);
+  const [isOtpLoading, setIsOtpLoading] = useState(false);
+  const [otpError, setOtpError] = useState<string | null>(null);
+  const [otpSuccessMessage, setOtpSuccessMessage] = useState<string | null>(null);
+  const [manualTokenInput, setManualTokenInput] = useState('');
 
   // Voucher Code state
   const [voucherInput, setVoucherInput] = useState('');
@@ -379,6 +397,91 @@ export function FormRenderer({
     }
   };
 
+  // OTP Draft Recovery handlers
+  const handleRequestOtp = async () => {
+    if (!otpIdentifier.trim()) {
+      setOtpError('Please enter your email address or phone number.');
+      return;
+    }
+    setIsOtpLoading(true);
+    setOtpError(null);
+    try {
+      const res = await requestDraftOtp(activeSchema.id, otpIdentifier.trim());
+      setMaskedTarget(res.maskedTarget);
+      if (res.devOtp) setDevOtp(res.devOtp);
+      setOtpStep('verify');
+    } catch (err: any) {
+      setOtpError(err.message || 'Failed to send verification code.');
+    } finally {
+      setIsOtpLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (!otpCode.trim() || otpCode.trim().length !== 6) {
+      setOtpError('Please enter the 6-digit verification code.');
+      return;
+    }
+    setIsOtpLoading(true);
+    setOtpError(null);
+    try {
+      const draft = await verifyDraftOtp(activeSchema.id, otpIdentifier.trim(), otpCode.trim());
+      if (draft.schema) {
+        setActiveSchema(draft.schema);
+      }
+      reset(draft.values);
+      setLastAutoSaved(new Date(draft.savedAt).toLocaleTimeString());
+      setOtpSuccessMessage('Draft restored successfully!');
+      setTimeout(() => {
+        setIsResumeModalOpen(false);
+        setOtpStep('request');
+        setOtpCode('');
+        setOtpIdentifier('');
+        setDevOtp(null);
+        setOtpSuccessMessage(null);
+      }, 1200);
+    } catch (err: any) {
+      setOtpError(err.message || 'Invalid or expired code.');
+    } finally {
+      setIsOtpLoading(false);
+    }
+  };
+
+  const handleRestoreFromToken = async () => {
+    let cleanToken = manualTokenInput.trim();
+    if (!cleanToken) {
+      setOtpError('Please enter a resume token or URL.');
+      return;
+    }
+    if (cleanToken.includes('resume=')) {
+      const match = cleanToken.match(/resume=([a-zA-Z0-9_-]+)/);
+      if (match) cleanToken = match[1];
+    }
+    setIsOtpLoading(true);
+    setOtpError(null);
+    try {
+      const draft = await loadServerDraft(activeSchema.id, cleanToken);
+      if (!draft) {
+        throw new Error('Draft not found or expired.');
+      }
+      if (draft.schema) {
+        setActiveSchema(draft.schema);
+      }
+      reset(draft.values);
+      setLastAutoSaved(new Date(draft.savedAt).toLocaleTimeString());
+      setOtpSuccessMessage('Draft restored successfully!');
+      setTimeout(() => {
+        setIsResumeModalOpen(false);
+        setManualTokenInput('');
+        setOtpSuccessMessage(null);
+      }, 1200);
+    } catch (err: any) {
+      setOtpError(err.message || 'Failed to load draft from token.');
+    } finally {
+      setIsOtpLoading(false);
+    }
+  };
+
   // Form submission handler
   const executeFinalSubmission = async (
     data: Record<string, any>,
@@ -509,19 +612,34 @@ export function FormRenderer({
               )}
 
               {showDraftControls && activeSchema.settings.enableDrafts && !readOnly && (
-                <button
-                  type="button"
-                  onClick={handleGenerateResumeLink}
-                  disabled={isSavingServerDraft}
-                  className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 font-medium transition-colors"
-                >
-                  {isSavingServerDraft ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Share2 className="w-3.5 h-3.5 text-indigo-500" />
-                  )}
-                  <span>Save & Resume Later</span>
-                </button>
+                <div className="flex items-center space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsResumeModalOpen(true);
+                      setOtpError(null);
+                      setOtpSuccessMessage(null);
+                    }}
+                    className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 font-medium transition-colors"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5 text-blue-500" />
+                    <span>Resume Draft</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleGenerateResumeLink}
+                    disabled={isSavingServerDraft}
+                    className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 font-medium transition-colors"
+                  >
+                    {isSavingServerDraft ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Share2 className="w-3.5 h-3.5 text-indigo-500" />
+                    )}
+                    <span>Save & Resume Later</span>
+                  </button>
+                </div>
               )}
             </div>
           </div>
@@ -563,6 +681,251 @@ export function FormRenderer({
             >
               <X className="w-4 h-4" />
             </button>
+          </div>
+        )}
+
+        {/* Resume Saved Draft Modal Dialog */}
+        {isResumeModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-fadeIn">
+            <div className="w-full max-w-md bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
+              {/* Header */}
+              <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                <div className="flex items-center space-x-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center">
+                    <RotateCcw className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900">Resume Saved Draft</h3>
+                    <p className="text-xs text-slate-500">Restore your previously saved progress</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsResumeModalOpen(false)}
+                  className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Method Switcher Tabs */}
+              <div className="flex border-b border-slate-200 bg-slate-100/60 p-1 text-xs">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setResumeTab('otp');
+                    setOtpError(null);
+                  }}
+                  className={clsx(
+                    'flex-1 py-1.5 rounded-lg font-semibold flex items-center justify-center space-x-1.5 transition-all',
+                    resumeTab === 'otp'
+                      ? 'bg-white text-blue-600 shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  )}
+                >
+                  <KeyRound className="w-3.5 h-3.5" />
+                  <span>6-Digit Verification Code</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setResumeTab('link');
+                    setOtpError(null);
+                  }}
+                  className={clsx(
+                    'flex-1 py-1.5 rounded-lg font-semibold flex items-center justify-center space-x-1.5 transition-all',
+                    resumeTab === 'link'
+                      ? 'bg-white text-blue-600 shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  )}
+                >
+                  <Share2 className="w-3.5 h-3.5" />
+                  <span>Magic Link / Token</span>
+                </button>
+              </div>
+
+              <div className="p-5 space-y-4">
+                {/* OTP TAB */}
+                {resumeTab === 'otp' ? (
+                  otpStep === 'request' ? (
+                    <div className="space-y-3.5">
+                      <div>
+                        <label className="text-xs font-semibold text-slate-700 block mb-1">
+                          Email Address or Phone Number
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            placeholder="e.g. applicant@university.edu or +1234567890"
+                            value={otpIdentifier}
+                            onChange={(e) => setOtpIdentifier(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && handleRequestOtp()}
+                            className="w-full text-xs rounded-xl border border-slate-300 pl-3 pr-3 py-2 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                          />
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-1">
+                          We will generate a 6-digit verification code valid for 15 minutes.
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleRequestOtp}
+                        disabled={isOtpLoading || !otpIdentifier.trim()}
+                        className={clsx(
+                          'w-full py-2.5 px-4 rounded-xl text-xs font-semibold text-white shadow-xs flex items-center justify-center space-x-2 transition-all',
+                          isOtpLoading || !otpIdentifier.trim()
+                            ? 'bg-blue-300 cursor-not-allowed'
+                            : 'bg-blue-600 hover:bg-blue-700 active:scale-[0.99]'
+                        )}
+                      >
+                        {isOtpLoading ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span>Checking for drafts...</span>
+                          </>
+                        ) : (
+                          <>
+                            <KeyRound className="w-4 h-4" />
+                            <span>Send Verification Code</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3.5">
+                      <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl">
+                        <p className="text-xs text-blue-900 font-medium">
+                          A 6-digit verification code was generated for{' '}
+                          <span className="font-bold font-mono">{maskedTarget}</span>.
+                        </p>
+                        {devOtp && (
+                          <div className="mt-2 pt-2 border-t border-blue-200/60 flex items-center justify-between">
+                            <span className="text-[10px] uppercase font-bold text-blue-600 tracking-wider">
+                              Dev/Test Code:
+                            </span>
+                            <span className="font-mono font-bold text-xs bg-white px-2 py-0.5 rounded border border-blue-300 text-blue-900">
+                              {devOtp}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-semibold text-slate-700 block mb-1">
+                          Enter 6-Digit Code
+                        </label>
+                        <input
+                          type="text"
+                          maxLength={6}
+                          placeholder="••••••"
+                          value={otpCode}
+                          onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                          onKeyDown={(e) => e.key === 'Enter' && handleVerifyOtp()}
+                          className="w-full text-center tracking-[0.4em] font-mono text-lg font-bold rounded-xl border border-slate-300 py-2.5 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                        />
+                      </div>
+
+                      <div className="flex items-center space-x-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOtpStep('request');
+                            setOtpCode('');
+                            setOtpError(null);
+                          }}
+                          className="py-2.5 px-3 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-medium"
+                        >
+                          Change Target
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleVerifyOtp}
+                          disabled={isOtpLoading || otpCode.trim().length !== 6}
+                          className={clsx(
+                            'flex-1 py-2.5 px-4 rounded-xl text-xs font-semibold text-white shadow-xs flex items-center justify-center space-x-2 transition-all',
+                            isOtpLoading || otpCode.trim().length !== 6
+                              ? 'bg-blue-300 cursor-not-allowed'
+                              : 'bg-blue-600 hover:bg-blue-700 active:scale-[0.99]'
+                          )}
+                        >
+                          {isOtpLoading ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              <span>Verifying...</span>
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircle2 className="w-4 h-4" />
+                              <span>Verify & Restore Draft</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  )
+                ) : (
+                  /* MAGIC LINK / TOKEN TAB */
+                  <div className="space-y-3.5">
+                    <div>
+                      <label className="text-xs font-semibold text-slate-700 block mb-1">
+                        Resume Token or Shareable URL
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="dft_... or https://.../f/[id]?resume=dft_..."
+                        value={manualTokenInput}
+                        onChange={(e) => setManualTokenInput(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleRestoreFromToken()}
+                        className="w-full text-xs font-mono rounded-xl border border-slate-300 px-3 py-2 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                      />
+                      <p className="text-[11px] text-slate-500 mt-1">
+                        Paste the full magic link you received earlier or the resume token.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleRestoreFromToken}
+                      disabled={isOtpLoading || !manualTokenInput.trim()}
+                      className={clsx(
+                        'w-full py-2.5 px-4 rounded-xl text-xs font-semibold text-white shadow-xs flex items-center justify-center space-x-2 transition-all',
+                        isOtpLoading || !manualTokenInput.trim()
+                          ? 'bg-blue-300 cursor-not-allowed'
+                          : 'bg-blue-600 hover:bg-blue-700 active:scale-[0.99]'
+                      )}
+                    >
+                      {isOtpLoading ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Restoring...</span>
+                        </>
+                      ) : (
+                        <>
+                          <RotateCcw className="w-4 h-4" />
+                          <span>Restore Draft</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
+
+                {/* Error & Success Alerts */}
+                {otpError && (
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-xl flex items-center space-x-2 text-red-700 text-xs">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{otpError}</span>
+                  </div>
+                )}
+
+                {otpSuccessMessage && (
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center space-x-2 text-emerald-800 text-xs font-semibold">
+                    <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+                    <span>{otpSuccessMessage}</span>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         )}
 

@@ -75,14 +75,30 @@ export async function clearLocalDraft(formId: string): Promise<void> {
 export async function saveServerDraft(
   formId: string,
   values: Record<string, any>,
-  schema?: FormSchema
-): Promise<{ draftId: string; resumeToken: string; resumeUrl: string; savedAt: string }> {
+  schema?: FormSchema,
+  metadata?: { email?: string; phone?: string; progress?: number; resumeToken?: string }
+): Promise<{
+  draftId: string;
+  resumeToken: string;
+  resumeUrl: string;
+  savedAt: string;
+  email?: string | null;
+  phone?: string | null;
+  progress?: number;
+}> {
   const response = await fetch(`/api/forms/${encodeURIComponent(formId)}/drafts`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ values, schema }),
+    body: JSON.stringify({
+      values,
+      schema,
+      email: metadata?.email,
+      phone: metadata?.phone,
+      progress: metadata?.progress,
+      resumeToken: metadata?.resumeToken,
+    }),
   });
 
   if (!response.ok) {
@@ -91,6 +107,63 @@ export async function saveServerDraft(
   }
 
   return response.json();
+}
+
+/**
+ * Request a 6-digit OTP code to restore a draft via email or phone
+ */
+export async function requestDraftOtp(
+  formId: string,
+  identifier: string
+): Promise<{ success: boolean; message: string; maskedTarget: string; devOtp?: string }> {
+  const response = await fetch(
+    `/api/forms/${encodeURIComponent(formId)}/drafts/otp-request`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier }),
+    }
+  );
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || `Failed to request OTP: HTTP ${response.status}`);
+  }
+
+  return data;
+}
+
+/**
+ * Verify a 6-digit OTP code and retrieve the saved draft
+ */
+export async function verifyDraftOtp(
+  formId: string,
+  identifier: string,
+  otp: string
+): Promise<{
+  draftId: string;
+  resumeToken: string;
+  resumeUrl: string;
+  values: Record<string, any>;
+  schema?: FormSchema;
+  progress?: number;
+  savedAt: string;
+}> {
+  const response = await fetch(
+    `/api/forms/${encodeURIComponent(formId)}/drafts/otp-verify`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier, otp }),
+    }
+  );
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || `Failed to verify code: HTTP ${response.status}`);
+  }
+
+  return data;
 }
 
 /**
